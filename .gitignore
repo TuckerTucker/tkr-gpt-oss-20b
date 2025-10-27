@@ -3,3 +3,16 @@
 models/
 *.bin
 *.safetensors
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Chat history
+.chat_history/
+
+# Virtual environment
+.venv/
+venv/
