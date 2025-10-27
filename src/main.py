@@ -47,7 +47,10 @@ def setup_logging(verbose: bool = False) -> None:
     if not verbose:
         logging.getLogger("transformers").setLevel(logging.WARNING)
         logging.getLogger("mlx").setLevel(logging.WARNING)
-        # Also suppress inference logging unless explicitly requested
+
+    # Always suppress inference logging in CLI mode unless DEBUG level is explicitly set
+    # This prevents "Generation complete" messages from cluttering the chat interface
+    if log_level > logging.DEBUG:
         logging.getLogger("src.inference").setLevel(logging.WARNING)
 
 
