@@ -422,7 +422,7 @@ See `CONTRIBUTING.md` for detailed guidelines.
 
 ## License
 
-[License information here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
