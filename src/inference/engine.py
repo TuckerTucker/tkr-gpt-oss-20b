@@ -332,19 +332,23 @@ class InferenceEngine:
         Returns:
             Dictionary of kwargs for mlx_lm.generate/stream_generate
         """
+        # max_tokens is a direct parameter to stream_generate()
+        # Other sampling params go into **kwargs which get passed to the sampler
         kwargs = {
             "max_tokens": sampling_params.max_tokens,
-            "temperature": sampling_params.temperature,  # Note: some mlx versions use 'temp', newer use 'temperature'
         }
 
-        # Add optional parameters if they differ from defaults
+        # Only add sampling parameters if they differ from defaults
+        # MLX sampler uses 'temp' not 'temperature'
+        if sampling_params.temperature != 1.0:
+            kwargs["temp"] = sampling_params.temperature
+
         if sampling_params.top_p < 1.0:
             kwargs["top_p"] = sampling_params.top_p
 
-        if sampling_params.repetition_penalty != 1.0:
-            kwargs["repetition_penalty"] = sampling_params.repetition_penalty
-
-        # Note: mlx_lm may not support all sampling params
-        # We include what's commonly supported
+        # Note: repetition_penalty might not be supported in all MLX versions
+        # Commenting out for now to avoid errors
+        # if sampling_params.repetition_penalty != 1.0:
+        #     kwargs["repetition_penalty"] = sampling_params.repetition_penalty
 
         return kwargs
