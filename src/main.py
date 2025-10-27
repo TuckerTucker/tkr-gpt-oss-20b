@@ -47,6 +47,8 @@ def setup_logging(verbose: bool = False) -> None:
     if not verbose:
         logging.getLogger("transformers").setLevel(logging.WARNING)
         logging.getLogger("mlx").setLevel(logging.WARNING)
+        # Also suppress inference logging unless explicitly requested
+        logging.getLogger("src.inference").setLevel(logging.WARNING)
 
 
 logger = logging.getLogger(__name__)

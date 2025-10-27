@@ -63,7 +63,14 @@ class REPL:
             persistence=self.persistence,
             model_info=model_info,
         )
-        self.formatter = MessageFormatter(show_metadata=True)
+
+        # Determine if we should show metadata based on config
+        show_metadata = True
+        if config:
+            # Show metadata if either show_tokens or show_latency is True
+            show_metadata = getattr(config, 'show_tokens', True) or getattr(config, 'show_latency', True)
+
+        self.formatter = MessageFormatter(show_metadata=show_metadata)
         self.welcome = WelcomeDisplay()
 
         # Setup input handler with command completion and history
