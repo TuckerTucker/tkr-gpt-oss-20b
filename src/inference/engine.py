@@ -334,7 +334,7 @@ class InferenceEngine:
         """
         kwargs = {
             "max_tokens": sampling_params.max_tokens,
-            "temp": sampling_params.temperature,  # mlx_lm uses 'temp' not 'temperature'
+            "temperature": sampling_params.temperature,  # Note: some mlx versions use 'temp', newer use 'temperature'
         }
 
         # Add optional parameters if they differ from defaults
