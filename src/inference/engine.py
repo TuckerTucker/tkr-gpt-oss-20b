@@ -159,8 +159,11 @@ class InferenceEngine:
                 f"({metrics.tokens_per_second:.2f} tokens/sec)"
             )
 
+            # Extract final channel content from Harmony format
+            clean_text = self._extract_final_channel(generated_text)
+
             return GenerationResult(
-                text=generated_text,
+                text=clean_text,
                 tokens_generated=tokens_generated,
                 latency_ms=latency_ms,
                 tokens_per_second=metrics.tokens_per_second,
@@ -352,3 +355,51 @@ class InferenceEngine:
         #     kwargs["repetition_penalty"] = sampling_params.repetition_penalty
 
         return kwargs
+
+    def _extract_final_channel(self, text: str) -> str:
+        """
+        Extract the final channel content from Harmony-formatted response.
+
+        GPT-OSS-20B uses the Harmony multi-channel format with three channels:
+        - analysis: Internal reasoning (should NOT be shown to users)
+        - commentary: Tool/function execution output
+        - final: Clean, user-facing response
+
+        Args:
+            text: Raw generated text with channel markers
+
+        Returns:
+            Extracted final channel content, or original text if no channels found
+        """
+        # Look for the final channel marker
+        final_marker = "<|channel|>final<|message|>"
+
+        if final_marker in text:
+            # Extract everything after the final channel marker
+            final_start = text.find(final_marker) + len(final_marker)
+            final_content = text[final_start:]
+
+            # Clean up any trailing channel markers or end tokens
+            final_content = final_content.split("<|end|>")[0]
+            final_content = final_content.split("<|start|>")[0]
+
+            return final_content.strip()
+
+        # If no channel markers, check if this is just the analysis channel
+        # and try to extract a clean response
+        if "<|channel|>analysis" in text:
+            # Model may be outputting analysis without final channel
+            # In this case, try to extract the last coherent statement
+            logger.warning("Model output contains analysis channel but no final channel")
+
+            # Try to find content after <|im_start|>assistant
+            if "<|im_start|>assistant" in text:
+                content = text.split("<|im_start|>assistant")[1]
+                # Remove any channel markers
+                content = content.split("<|channel|>")[0]
+                content = content.split("<|end|>")[0]
+                return content.strip()
+
+        # No channel markers found, return original text
+        # This handles legacy responses or non-Harmony formatted output
+        return text.strip()
