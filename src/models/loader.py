@@ -106,15 +106,19 @@ class ModelLoader:
                 self.device = detected_device
             logger.info(f"Using device: {self.device}")
 
-            # 3. Get model spec from registry
+            # 3. Get model spec from registry (or use direct HuggingFace path)
             spec = get_model_spec(self.model_name)
+
             if spec is None:
-                from .exceptions import ModelNotFoundError
-
-                raise ModelNotFoundError(self.model_name, ["MLX model registry"])
-
-            model_path = self.model_path_override or spec["path"]
-            context_length = spec["context_length"]
+                # Not in registry - try as direct HuggingFace path
+                logger.info(f"Model not in registry, attempting direct HuggingFace path: {self.model_name}")
+                model_path = self.model_path_override or self.model_name
+                # Use reasonable defaults for unknown models
+                context_length = self.max_model_len
+            else:
+                # Use registry spec
+                model_path = self.model_path_override or spec["path"]
+                context_length = spec["context_length"]
 
             # 4. Check memory availability
             can_fit, mem_message = MemoryManager.can_fit_model(
