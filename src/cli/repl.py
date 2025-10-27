@@ -218,11 +218,12 @@ class REPL:
         Returns:
             Generated response text
         """
-        # Get conversation context
-        messages = self.conversation.get_history()
+        # Get conversation context and format as prompt
+        # ConversationManager has a format_prompt() method that converts messages to text
+        prompt = self.conversation.format_prompt()
 
-        # Generate (this will be implemented in Wave 2)
-        response = self.engine.generate(messages)
+        # Generate using the formatted prompt
+        response = self.engine.generate(prompt)
 
         return response
 
