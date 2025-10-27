@@ -1,0 +1,8 @@
+# CLI Module Requirements
+# Install with: pip install -r src/cli/requirements.txt
+
+# Output formatting
+rich>=13.0.0
+
+# Enhanced input (optional - falls back to basic input if not available)
+prompt-toolkit>=3.0.0

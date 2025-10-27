@@ -1,0 +1,15 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Test message",
+      "timestamp": "2025-10-27T06:19:53.286407",
+      "tokens": 8
+    }
+  ],
+  "max_context_tokens": 4096,
+  "created_at": "2025-10-27T06:19:53.286401",
+  "metadata": {},
+  "total_tokens": 8,
+  "message_count": 1
+}

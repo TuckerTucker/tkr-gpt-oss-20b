@@ -1,0 +1,25 @@
+# GPT-OSS CLI Chat Requirements
+# MLX-optimized inference for Apple Silicon
+
+# Core MLX dependencies
+mlx>=0.4.0
+mlx-lm>=0.8.0
+
+# Model and tokenization
+transformers>=4.35.0
+tokenizers>=0.15.0
+
+# CLI interface
+rich>=13.7.0
+prompt-toolkit>=3.0.43
+
+# Configuration and utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+
+# Development dependencies
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+black>=23.12.0
+mypy>=1.7.1
+ruff>=0.1.8
