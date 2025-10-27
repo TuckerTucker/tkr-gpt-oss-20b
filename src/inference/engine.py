@@ -119,8 +119,7 @@ class InferenceEngine:
                 )
 
             # Get the model and tokenizer from the loader
-            model = self.model_loader.get_model()
-            tokenizer = self.model_loader.get_tokenizer()
+            model, tokenizer = self.model_loader.get_model()
 
             # Prepare generation kwargs from sampling params
             gen_kwargs = self._prepare_generation_kwargs(sampling_params)
@@ -230,8 +229,7 @@ class InferenceEngine:
                 )
 
             # Get the model and tokenizer from the loader
-            model = self.model_loader.get_model()
-            tokenizer = self.model_loader.get_tokenizer()
+            model, tokenizer = self.model_loader.get_model()
 
             # Prepare generation kwargs from sampling params
             gen_kwargs = self._prepare_generation_kwargs(sampling_params)
