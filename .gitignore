@@ -30,3 +30,11 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# ============================================================================
+# Claude Code Local Settings
+# ============================================================================
+# Claude Code agent/command/hook configurations (local development only)
+.claude/
+.context-kit/
+CLAUDE.local.md
