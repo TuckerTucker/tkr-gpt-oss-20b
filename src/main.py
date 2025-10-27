@@ -18,6 +18,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# Add project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 # Configure logging before other imports
 def setup_logging(verbose: bool = False) -> None:
     """
