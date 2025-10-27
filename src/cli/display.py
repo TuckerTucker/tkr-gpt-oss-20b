@@ -69,6 +69,28 @@ class MessageFormatter:
         if self.show_metadata and metadata and not streaming:
             self._display_metadata(metadata)
 
+    def display_reasoning(self, reasoning: str, max_length: int = 500) -> None:
+        """Display reasoning trace from analysis channel.
+
+        Args:
+            reasoning: Raw reasoning text from analysis channel
+            max_length: Maximum length before truncation
+        """
+        from src.prompts.harmony_channels import format_reasoning_trace
+
+        if not reasoning:
+            return
+
+        # Format and truncate reasoning
+        formatted = format_reasoning_trace(reasoning, max_length)
+
+        # Display with distinct styling
+        console.print()
+        console.print("─" * 50, style="dim cyan")
+        console.print("🧠 Reasoning:", style="bold cyan")
+        console.print(formatted, style="dim italic cyan")
+        console.print("─" * 50, style="dim cyan")
+
     def display_system_message(self, content: str) -> None:
         """
         Display formatted system message.

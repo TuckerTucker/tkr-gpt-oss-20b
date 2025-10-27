@@ -7,7 +7,7 @@ using Apple's MLX framework for efficient inference on Apple Silicon.
 
 import time
 from dataclasses import dataclass
-from typing import Optional, Iterator, TYPE_CHECKING
+from typing import Optional, Iterator, TYPE_CHECKING, Dict
 import logging
 
 from src.inference.exceptions import (
@@ -17,6 +17,7 @@ from src.inference.exceptions import (
 )
 from src.inference.metrics import MetricsTracker, GenerationMetrics
 from src.sampling.params import SamplingParams
+from src.prompts.harmony import HarmonyEncoder, ParsedResponse
 
 if TYPE_CHECKING:
     from src.models.loader import ModelLoader
@@ -47,6 +48,9 @@ class GenerationResult:
     finish_reason: str
     prompt_tokens: Optional[int] = None
     metrics: Optional[GenerationMetrics] = None
+    reasoning: Optional[str] = None
+    commentary: Optional[str] = None
+    channels: Optional[Dict[str, str]] = None
 
 
 class InferenceEngine:
@@ -72,6 +76,7 @@ class InferenceEngine:
         self.config = config
         self.metrics_tracker = MetricsTracker()
         self._cancelled = False
+        self.harmony_encoder = HarmonyEncoder()
 
         # Verify model is loaded
         if not self.model_loader.is_loaded():
@@ -159,8 +164,30 @@ class InferenceEngine:
                 f"({metrics.tokens_per_second:.2f} tokens/sec)"
             )
 
-            # Extract final channel content from Harmony format
-            clean_text = self._extract_final_channel(generated_text)
+            # Parse Harmony response if enabled
+            if self.config and getattr(self.config, 'use_harmony_format', True):
+                parsed = self.harmony_encoder.parse_response(generated_text)
+                clean_text = parsed.final
+
+                # Capture reasoning if enabled
+                if getattr(self.config, 'capture_reasoning', False):
+                    reasoning = parsed.analysis
+                    commentary = parsed.commentary
+                    channels = {'final': parsed.final}
+                    if parsed.analysis:
+                        channels['analysis'] = parsed.analysis
+                    if parsed.commentary:
+                        channels['commentary'] = parsed.commentary
+                else:
+                    reasoning = None
+                    commentary = None
+                    channels = None
+            else:
+                # Legacy mode: use existing extraction
+                clean_text = self._extract_final_channel(generated_text)
+                reasoning = None
+                commentary = None
+                channels = None
 
             return GenerationResult(
                 text=clean_text,
@@ -170,6 +197,9 @@ class InferenceEngine:
                 finish_reason=finish_reason,
                 prompt_tokens=prompt_tokens,
                 metrics=metrics,
+                reasoning=reasoning,
+                commentary=commentary,
+                channels=channels,
             )
 
         except Exception as e:
@@ -310,6 +340,17 @@ class InferenceEngine:
         """
         self._cancelled = True
         logger.info("Generation cancellation requested")
+
+    def get_reasoning_trace(self, result: GenerationResult) -> Optional[str]:
+        """Get reasoning trace from generation result.
+
+        Args:
+            result: GenerationResult with potential reasoning
+
+        Returns:
+            Reasoning trace or None if not captured
+        """
+        return result.reasoning
 
     def get_metrics_summary(self) -> dict:
         """

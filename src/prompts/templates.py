@@ -69,6 +69,15 @@ TEMPLATES = {
         "name": "Plain",
         "description": "Simple plain text format",
     },
+    "harmony": {
+        "system": "<|start|>system<|message|>{content}<|end|>\n",
+        "developer": "<|start|>developer<|message|>{content}<|end|>\n",
+        "user": "<|start|>user<|message|>{content}<|end|>\n",
+        "assistant": "<|start|>assistant<|channel|>{channel}<|message|>{content}<|end|>\n",
+        "assistant_start": "<|start|>assistant<|channel|>final<|message|>",
+        "name": "Harmony",
+        "description": "OpenAI Harmony format with multi-channel support for GPT-OSS models",
+    },
 }
 
 
@@ -332,6 +341,19 @@ class PromptTemplate:
             Self for chaining
         """
         self.messages.append({"role": "assistant", "content": content})
+        return self
+
+    def add_developer(self, content: str) -> "PromptTemplate":
+        """
+        Add developer message.
+
+        Args:
+            content: Developer message content
+
+        Returns:
+            Self for chaining
+        """
+        self.messages.append({"role": "developer", "content": content})
         return self
 
     def build(self, include_generation_prompt: bool = False) -> str:

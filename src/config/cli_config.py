@@ -17,6 +17,7 @@ class CLIConfig:
         colorize: Enable colored output in terminal
         show_tokens: Display token counts for inputs/outputs
         show_latency: Display generation time metrics
+        show_reasoning: Display reasoning traces from analysis channel
         verbose: Enable debug logging output
         auto_save: Automatically save conversation history on exit
         history_file: Path to conversation history file
@@ -28,6 +29,7 @@ class CLIConfig:
     colorize: bool = True
     show_tokens: bool = True
     show_latency: bool = True
+    show_reasoning: bool = False
     verbose: bool = False
 
     # Behavior
@@ -71,6 +73,7 @@ class CLIConfig:
             COLORIZE: Enable colored output (default: true)
             SHOW_TOKENS: Display token counts (default: true)
             SHOW_LATENCY: Display generation time (default: true)
+            SHOW_REASONING: Display reasoning traces (default: false)
             VERBOSE: Enable debug logging (default: false)
             AUTO_SAVE: Auto-save conversation history (default: false)
             HISTORY_FILE: Conversation history file path (default: .chat_history.json)
@@ -89,6 +92,7 @@ class CLIConfig:
             colorize=get_bool("COLORIZE", True),
             show_tokens=get_bool("SHOW_TOKENS", True),
             show_latency=get_bool("SHOW_LATENCY", True),
+            show_reasoning=get_bool("SHOW_REASONING", False),
             verbose=get_bool("VERBOSE", False),
             auto_save=get_bool("AUTO_SAVE", False),
             history_file=os.getenv("HISTORY_FILE", ".chat_history.json"),

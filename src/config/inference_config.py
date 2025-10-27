@@ -6,7 +6,21 @@ streaming behavior, and stop sequences during text generation.
 
 import os
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Optional
+
+
+class ReasoningLevel(Enum):
+    """Reasoning effort level for GPT-OSS models.
+
+    Based on GPT-OSS-20B best practices:
+    - LOW: Fast responses, minimal chain-of-thought (extraction, simple queries)
+    - MEDIUM: Balanced quality/speed (chat, summarization) [DEFAULT]
+    - HIGH: Maximum reasoning (research, complex analysis, open-ended tasks)
+    """
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 @dataclass
@@ -19,6 +33,10 @@ class InferenceConfig:
         top_k: Top-k sampling limit, -1 to disable
         repetition_penalty: Penalty for token repetition (1.0 = no penalty)
         max_tokens: Maximum number of tokens to generate
+        use_harmony_format: Enable Harmony multi-channel format parsing
+        reasoning_level: Model reasoning effort (LOW/MEDIUM/HIGH)
+        capture_reasoning: Store analysis channel in results
+        show_reasoning: Display reasoning traces in CLI
         streaming: Enable token-by-token streaming output
         stop_sequences: List of sequences that stop generation
     """
@@ -29,6 +47,12 @@ class InferenceConfig:
     top_k: int = 50
     repetition_penalty: float = 1.0
     max_tokens: int = 512
+
+    # Harmony format settings
+    use_harmony_format: bool = True
+    reasoning_level: ReasoningLevel = ReasoningLevel.MEDIUM
+    capture_reasoning: bool = False
+    show_reasoning: bool = False
 
     # Streaming
     streaming: bool = True
@@ -72,6 +96,12 @@ class InferenceConfig:
                 f"top_k must be >= -1, got {self.top_k}"
             )
 
+        # Validate reasoning_level
+        if not isinstance(self.reasoning_level, ReasoningLevel):
+            raise ValueError(
+                f"reasoning_level must be ReasoningLevel enum, got {type(self.reasoning_level)}"
+            )
+
     @classmethod
     def from_env(cls) -> "InferenceConfig":
         """Load configuration from environment variables.
@@ -82,6 +112,10 @@ class InferenceConfig:
             TOP_K: Top-k sampling limit (default: 50)
             REPETITION_PENALTY: Repetition penalty factor (default: 1.0)
             MAX_TOKENS: Maximum output tokens (default: 512)
+            USE_HARMONY_FORMAT: Enable Harmony format parsing (default: true)
+            REASONING_LEVEL: Reasoning effort - low/medium/high (default: medium)
+            CAPTURE_REASONING: Store analysis channel (default: false)
+            SHOW_REASONING: Display reasoning traces (default: false)
             STREAMING: Enable streaming output (default: true)
             STOP_SEQUENCES: Comma-separated stop sequences (optional)
 
@@ -99,12 +133,29 @@ class InferenceConfig:
         if stop_str:
             stop_sequences = [s.strip() for s in stop_str.split(",") if s.strip()]
 
+        # Harmony settings
+        use_harmony_format = get_bool("USE_HARMONY_FORMAT", True)
+
+        reasoning_level_str = os.getenv("REASONING_LEVEL", "medium").lower()
+        reasoning_level = ReasoningLevel.MEDIUM
+        if reasoning_level_str == "low":
+            reasoning_level = ReasoningLevel.LOW
+        elif reasoning_level_str == "high":
+            reasoning_level = ReasoningLevel.HIGH
+
+        capture_reasoning = get_bool("CAPTURE_REASONING", False)
+        show_reasoning = get_bool("SHOW_REASONING", False)
+
         return cls(
             temperature=float(os.getenv("TEMPERATURE", "0.7")),
             top_p=float(os.getenv("TOP_P", "0.9")),
             top_k=int(os.getenv("TOP_K", "50")),
             repetition_penalty=float(os.getenv("REPETITION_PENALTY", "1.0")),
             max_tokens=int(os.getenv("MAX_TOKENS", "512")),
+            use_harmony_format=use_harmony_format,
+            reasoning_level=reasoning_level,
+            capture_reasoning=capture_reasoning,
+            show_reasoning=show_reasoning,
             streaming=get_bool("STREAMING", True),
             stop_sequences=stop_sequences,
         )

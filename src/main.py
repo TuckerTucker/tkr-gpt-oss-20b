@@ -95,6 +95,16 @@ Examples:
   %(prog)s --no-streaming                     # Disable token streaming
   %(prog)s --verbose                          # Enable debug logging
 
+  # Harmony format examples
+  %(prog)s --reasoning-level high --show-reasoning  # Show reasoning traces
+  %(prog)s --capture-reasoning                      # Store analysis in history
+  %(prog)s --no-harmony                             # Use legacy format
+
+Reasoning Levels:
+  low    - Fast responses, minimal chain-of-thought (simple queries, extraction)
+  medium - Balanced quality/speed (chat, summarization) [DEFAULT]
+  high   - Maximum reasoning (research, complex analysis, open-ended tasks)
+
 Environment:
   Set options via .env file or environment variables.
   See .env.example for all available options.
@@ -172,6 +182,41 @@ Environment:
         help="Disable token streaming",
     )
 
+    # Harmony format options
+    harmony_group = parser.add_argument_group("Harmony format options")
+    harmony_group.add_argument(
+        "--harmony",
+        dest="use_harmony_format",
+        action="store_true",
+        default=True,
+        help="Enable Harmony multi-channel format (default: enabled)",
+    )
+    harmony_group.add_argument(
+        "--no-harmony",
+        dest="use_harmony_format",
+        action="store_false",
+        help="Disable Harmony format, use legacy parsing",
+    )
+    harmony_group.add_argument(
+        "--reasoning-level",
+        type=str,
+        choices=["low", "medium", "high"],
+        default="medium",
+        help="Model reasoning effort: low (fast), medium (balanced), high (thorough)",
+    )
+    harmony_group.add_argument(
+        "--capture-reasoning",
+        action="store_true",
+        default=False,
+        help="Store analysis channel in conversation history",
+    )
+    harmony_group.add_argument(
+        "--show-reasoning",
+        action="store_true",
+        default=False,
+        help="Display reasoning traces in CLI output",
+    )
+
     # CLI configuration
     cli_group = parser.add_argument_group("CLI configuration")
     cli_group.add_argument(
@@ -204,7 +249,14 @@ Environment:
     )
 
     # Set defaults to None so we can distinguish user-provided values
-    parser.set_defaults(streaming=None, colorize=None)
+    parser.set_defaults(
+        streaming=None,
+        colorize=None,
+        use_harmony_format=None,
+        reasoning_level=None,
+        capture_reasoning=None,
+        show_reasoning=None,
+    )
 
     return parser.parse_args()
 
@@ -252,6 +304,19 @@ def create_config_from_args(args: argparse.Namespace):
         inference_config.max_tokens = args.max_tokens
     if args.streaming is not None:
         inference_config.streaming = args.streaming
+
+    # Harmony format settings
+    if args.use_harmony_format is not None:
+        inference_config.use_harmony_format = args.use_harmony_format
+    if args.reasoning_level is not None:
+        from src.config.inference_config import ReasoningLevel
+        inference_config.reasoning_level = ReasoningLevel[args.reasoning_level.upper()]
+    if args.capture_reasoning is not None:
+        inference_config.capture_reasoning = args.capture_reasoning
+    if args.show_reasoning is not None:
+        # Store in both inference_config and cli_config
+        inference_config.show_reasoning = args.show_reasoning
+        cli_config.show_reasoning = args.show_reasoning
 
     if args.colorize is not None:
         cli_config.colorize = args.colorize

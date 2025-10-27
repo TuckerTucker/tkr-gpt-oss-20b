@@ -36,6 +36,21 @@ from .presets import (
     SystemPromptBuilder,
 )
 
+from .harmony_channels import (
+    extract_channel,
+    extract_all_channels,
+    validate_harmony_format,
+    format_reasoning_trace,
+)
+
+from .harmony import (
+    HarmonyEncoder,
+    HarmonyMessage,
+    ParsedResponse,
+    Role,
+    Channel,
+)
+
 __all__ = [
     # Template constants
     "TEMPLATES",
@@ -59,6 +74,17 @@ __all__ = [
     "create_custom_prompt",
     # Preset classes
     "SystemPromptBuilder",
+    # Harmony channel utilities
+    "extract_channel",
+    "extract_all_channels",
+    "validate_harmony_format",
+    "format_reasoning_trace",
+    # Harmony encoder
+    "HarmonyEncoder",
+    "HarmonyMessage",
+    "ParsedResponse",
+    "Role",
+    "Channel",
 ]
 
 __version__ = "1.0.0"

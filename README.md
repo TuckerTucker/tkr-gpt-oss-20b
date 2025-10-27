@@ -13,6 +13,7 @@ Talk to powerful open-source models like GPT-J, GPT-NeoX, and Phi-3 directly fro
 - **Rich Terminal UI**: Colorized output, command completion, and formatted messages
 - **Conversation Management**: Save/load chat history, context tracking, token counting
 - **Flexible Configuration**: Environment variables, config files, and CLI arguments
+- **Harmony Integration**: Multi-channel output with reasoning traces for enhanced transparency
 
 ## Quick Start
 
@@ -143,6 +144,105 @@ Total Tokens: 287
 Conversation Started: 2025-10-27 10:30:00
 ═══════════════════════════════════════════════════════════════
 ```
+
+## Harmony Integration
+
+GPT-OSS CLI now supports **Harmony multi-channel format**, enabling models to output multiple information streams simultaneously:
+
+- **Analysis Channel**: Internal reasoning and chain-of-thought (developer visibility)
+- **Commentary Channel**: Meta-commentary about actions taken
+- **Final Channel**: User-facing response content
+
+### Why Use Harmony?
+
+- **Enhanced Quality**: Models "think out loud" leading to better responses
+- **Transparency**: Access reasoning traces for debugging and understanding
+- **Configurable**: Adjust reasoning levels (low/medium/high) based on task needs
+- **Safety**: Analysis channel filtered out by default - never shown to end users
+
+### Quick Start with Harmony
+
+```bash
+# Default mode (Harmony enabled, medium reasoning)
+python src/main.py
+
+# Show reasoning traces while chatting
+python src/main.py --show-reasoning
+
+# Adjust reasoning level for different tasks
+python src/main.py --reasoning-level low    # Fast (extraction, simple queries)
+python src/main.py --reasoning-level medium # Balanced (chat, default)
+python src/main.py --reasoning-level high   # Thorough (research, analysis)
+
+# Capture reasoning for later analysis
+python src/main.py --capture-reasoning
+
+# Combine options for debugging
+python src/main.py --reasoning-level high --show-reasoning --capture-reasoning
+```
+
+### Reasoning Levels
+
+| Level  | Use Case | Speed | Quality | Token Usage |
+|--------|----------|-------|---------|-------------|
+| **low** | Extraction, simple Q&A | Fast | Good | +5-10% |
+| **medium** | Chat, summarization | Balanced | Better | +10-20% |
+| **high** | Research, complex analysis | Slower | Best | +20-40% |
+
+### Example with Reasoning
+
+```bash
+$ python src/main.py --show-reasoning
+
+> Explain quantum entanglement
+
+[Reasoning Trace]
+User asks about quantum entanglement - complex physics topic. I should:
+1. Provide a clear definition
+2. Use an accessible analogy
+3. Mention key properties (non-locality, measurement correlation)
+4. Note practical implications
+
+[Response]
+Quantum entanglement is a phenomenon where two particles become connected
+such that the quantum state of one particle instantly influences the other,
+regardless of distance. Think of it like having two magic coins: when you
+flip one and it lands on heads, the other instantly becomes tails, even if
+it's on the other side of the universe. This "spooky action at a distance"
+(as Einstein called it) is real and has been experimentally verified.
+It's the basis for emerging technologies like quantum computing and
+quantum cryptography.
+```
+
+### Programmatic Usage
+
+```python
+from src.inference.engine import InferenceEngine
+from src.config.inference_config import InferenceConfig, ReasoningLevel
+
+# Configure Harmony
+config = InferenceConfig(
+    use_harmony_format=True,
+    reasoning_level=ReasoningLevel.HIGH,
+    capture_reasoning=True
+)
+
+# Generate with reasoning
+engine = InferenceEngine(model_loader, config)
+result = engine.generate(prompt, params)
+
+# Access results
+print(result.text)       # Final channel (user-safe)
+print(result.reasoning)  # Analysis channel (developer-only)
+print(result.commentary) # Commentary channel (if present)
+```
+
+### Learn More
+
+- **User Guide**: [docs/harmony_integration.md](docs/harmony_integration.md) - Comprehensive guide to Harmony features
+- **Migration Guide**: [docs/migration_to_harmony.md](docs/migration_to_harmony.md) - Upgrading from legacy format
+- **Examples**: [examples/harmony_prompts.py](examples/harmony_prompts.py) - Working code examples
+- **Safety Note**: Always use `result.text` for end users - analysis channel is not user-safe
 
 ## Configuration
 

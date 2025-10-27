@@ -205,7 +205,10 @@ class REPL:
             self.conversation.add_message("user", message)
 
             # Generate response
-            response = self._generate_response()
+            result = self._generate_response()
+
+            # Extract response text
+            response = result.text if hasattr(result, 'text') else str(result)
 
             # Add assistant message to conversation
             self.conversation.add_message("assistant", response)
@@ -213,28 +216,34 @@ class REPL:
             # Display response
             self.formatter.display_assistant_message(response)
 
+            # Display reasoning if enabled and available
+            if (self.config and
+                getattr(self.config, 'show_reasoning', False) and
+                hasattr(result, 'reasoning') and
+                result.reasoning):
+                self.formatter.display_reasoning(result.reasoning)
+
         except Exception as e:
             print_error(f"Failed to generate response: {str(e)}")
 
         return True
 
-    def _generate_response(self) -> str:
+    def _generate_response(self):
         """
         Generate response using inference engine.
 
         Returns:
-            Generated response text
+            GenerationResult or MultiChannelResult object
         """
         # Get conversation context and format as prompt
         # ConversationManager has a format_prompt() method that converts messages to text
         prompt = self.conversation.format_prompt()
 
         # Generate using the formatted prompt
-        # engine.generate() returns a GenerationResult object
+        # engine.generate() returns a GenerationResult or MultiChannelResult object
         result = self.engine.generate(prompt)
 
-        # Extract the text from the result
-        return result.text
+        return result
 
     def _mock_response(self, message: str) -> None:
         """
