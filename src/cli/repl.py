@@ -219,7 +219,7 @@ class REPL:
             Generated response text
         """
         # Get conversation context
-        messages = self.conversation.get_messages()
+        messages = self.conversation.get_history()
 
         # Generate (this will be implemented in Wave 2)
         response = self.engine.generate(messages)
