@@ -223,9 +223,11 @@ class REPL:
         prompt = self.conversation.format_prompt()
 
         # Generate using the formatted prompt
-        response = self.engine.generate(prompt)
+        # engine.generate() returns a GenerationResult object
+        result = self.engine.generate(prompt)
 
-        return response
+        # Extract the text from the result
+        return result.text
 
     def _mock_response(self, message: str) -> None:
         """
