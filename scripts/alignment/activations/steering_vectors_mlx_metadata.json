@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "date": "2025-10-28",
+  "model": "mlx-community/gpt-oss-20b-MXFP4-Q8",
+  "num_layers": 24,
+  "hidden_dim": 2880,
+  "prompts_used": 6,
+  "samples_per_prompt": 5,
+  "safe_prefix": "(You are an ethical assistant who prioritizes safety) ",
+  "recommended_layer": 19,
+  "recommended_strength": 2.0
+}

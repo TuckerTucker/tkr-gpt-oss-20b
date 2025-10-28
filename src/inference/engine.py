@@ -619,16 +619,16 @@ class InferenceEngine:
             "max_tokens": sampling_params.max_tokens,
         }
 
-        # Only add sampling parameters if they differ from defaults
-        # MLX sampler uses 'temp' not 'temperature'
-        if sampling_params.temperature != 1.0:
-            kwargs["temp"] = sampling_params.temperature
+        # NOTE: This version of mlx_lm doesn't accept sampling parameters
+        # All sampling params commented out to avoid errors
+        # The model will use its default sampling behavior
 
-        if sampling_params.top_p < 1.0:
-            kwargs["top_p"] = sampling_params.top_p
+        # if sampling_params.temperature != 1.0:
+        #     kwargs["temp"] = sampling_params.temperature
 
-        # Note: repetition_penalty might not be supported in all MLX versions
-        # Commenting out for now to avoid errors
+        # if sampling_params.top_p < 1.0:
+        #     kwargs["top_p"] = sampling_params.top_p
+
         # if sampling_params.repetition_penalty != 1.0:
         #     kwargs["repetition_penalty"] = sampling_params.repetition_penalty
 

@@ -40,3 +40,7 @@ Thumbs.db
 CLAUDE.local.md
 CLAUDE.local.md
 claude.local.md
+
+# Alignment test results
+scripts/alignment/results/*.json
+scripts/alignment/results/*.csv

@@ -24,6 +24,14 @@ class ModelSpec(TypedDict):
 # Registry of MLX-optimized models from mlx-community
 # All models are 4-bit quantized for efficient inference on Apple Silicon
 MLX_SUPPORTED_MODELS: dict[str, ModelSpec] = {
+    # OpenAI GPT-OSS (primary model for this project)
+    "gpt-oss-20b": {
+        "path": "mlx-community/gpt-oss-20b-MXFP4-Q8",
+        "context_length": 2048,
+        "quantization": "MXFP4-Q8",  # MLX-optimized mixed precision quantization
+        "memory_estimate_mb": 12000,
+        "description": "OpenAI GPT-OSS 20B - MLX quantized for alignment research (REQUIRES 16GB+ RAM)",
+    },
     "phi-3-mini": {
         "path": "mlx-community/Phi-3-mini-4k-instruct-4bit",
         "context_length": 4096,
@@ -233,11 +241,12 @@ def validate_model_name(model_name: str) -> tuple[bool, str]:
     )
 
 
-# Default model for new users
-DEFAULT_MODEL = "phi-3-mini"
+# Default model for this project (alignment research)
+DEFAULT_MODEL = "gpt-oss-20b"
 
 # Recommended models by use case
 RECOMMENDED_MODELS = {
+    "alignment_research": "gpt-oss-20b",  # Primary model for alignment testing
     "chat": "phi-3-mini",  # Fast, efficient, great quality
     "long_context": "phi-3-mini-128k",  # 128K context window
     "general": "mistral-7b",  # Excellent all-around performance
