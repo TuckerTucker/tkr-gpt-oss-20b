@@ -39,6 +39,8 @@ class TestInferenceConfigDefaults:
         assert config.reasoning_level == ReasoningLevel.MEDIUM
         assert config.capture_reasoning is False
         assert config.show_reasoning is False
+        assert config.knowledge_cutoff == "2024-06"
+        assert config.current_date is None
 
     def test_default_config_validates(self):
         """Test default config with Harmony fields passes validation."""
@@ -405,3 +407,278 @@ class TestHarmonyConfigCoverage:
         assert str(ReasoningLevel.LOW.value) == "low"
         assert str(ReasoningLevel.MEDIUM.value) == "medium"
         assert str(ReasoningLevel.HIGH.value) == "high"
+
+
+class TestKnowledgeCutoffField:
+    """Tests for knowledge_cutoff field."""
+
+    def test_knowledge_cutoff_default_value(self):
+        """Test knowledge_cutoff has correct default value."""
+        config = InferenceConfig()
+        assert config.knowledge_cutoff == "2024-06"
+
+    def test_knowledge_cutoff_custom_value(self):
+        """Test knowledge_cutoff accepts custom values."""
+        config = InferenceConfig(knowledge_cutoff="2025-01")
+        assert config.knowledge_cutoff == "2025-01"
+
+    def test_knowledge_cutoff_from_env(self):
+        """Test KNOWLEDGE_CUTOFF env var is loaded correctly."""
+        with patch.dict(os.environ, {"KNOWLEDGE_CUTOFF": "2025-03"}):
+            config = InferenceConfig.from_env()
+            assert config.knowledge_cutoff == "2025-03"
+
+    def test_knowledge_cutoff_from_env_default(self):
+        """Test KNOWLEDGE_CUTOFF defaults to 2024-06 when not set."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = InferenceConfig.from_env()
+            assert config.knowledge_cutoff == "2024-06"
+
+    def test_knowledge_cutoff_validation_empty_string(self):
+        """Test validate() rejects empty knowledge_cutoff."""
+        config = InferenceConfig(knowledge_cutoff="")
+        with pytest.raises(ValueError, match="knowledge_cutoff cannot be empty"):
+            config.validate()
+
+    def test_knowledge_cutoff_validation_accepts_valid(self):
+        """Test validate() accepts valid knowledge_cutoff values."""
+        valid_values = ["2024-06", "2025-01", "2023-12", "2024-03"]
+        for value in valid_values:
+            config = InferenceConfig(knowledge_cutoff=value)
+            config.validate()  # Should not raise
+
+
+class TestCurrentDateField:
+    """Tests for current_date field."""
+
+    def test_current_date_default_value(self):
+        """Test current_date defaults to None."""
+        config = InferenceConfig()
+        assert config.current_date is None
+
+    def test_current_date_custom_value(self):
+        """Test current_date accepts custom values."""
+        config = InferenceConfig(current_date="2025-10-27")
+        assert config.current_date == "2025-10-27"
+
+    def test_current_date_auto_detection_from_env(self):
+        """Test current_date is auto-detected when env var not set."""
+        from datetime import datetime
+
+        with patch.dict(os.environ, {}, clear=True):
+            config = InferenceConfig.from_env()
+            # Should be auto-detected to today's date
+            expected_date = datetime.now().strftime('%Y-%m-%d')
+            assert config.current_date == expected_date
+
+    def test_current_date_auto_detection_when_empty_string(self):
+        """Test current_date is auto-detected when env var is empty string."""
+        from datetime import datetime
+
+        with patch.dict(os.environ, {"CURRENT_DATE": ""}):
+            config = InferenceConfig.from_env()
+            expected_date = datetime.now().strftime('%Y-%m-%d')
+            assert config.current_date == expected_date
+
+    def test_current_date_auto_detection_when_whitespace(self):
+        """Test current_date is auto-detected when env var is whitespace."""
+        from datetime import datetime
+
+        with patch.dict(os.environ, {"CURRENT_DATE": "   "}):
+            config = InferenceConfig.from_env()
+            expected_date = datetime.now().strftime('%Y-%m-%d')
+            assert config.current_date == expected_date
+
+    def test_current_date_from_env_explicit_value(self):
+        """Test CURRENT_DATE env var is loaded when explicitly set."""
+        with patch.dict(os.environ, {"CURRENT_DATE": "2025-10-27"}):
+            config = InferenceConfig.from_env()
+            assert config.current_date == "2025-10-27"
+
+    def test_current_date_validation_accepts_valid_format(self):
+        """Test validate() accepts valid YYYY-MM-DD format."""
+        valid_dates = ["2025-10-27", "2024-01-01", "2023-12-31", "2025-06-15"]
+        for date in valid_dates:
+            config = InferenceConfig(current_date=date)
+            config.validate()  # Should not raise
+
+    def test_current_date_validation_accepts_none(self):
+        """Test validate() accepts None for current_date."""
+        config = InferenceConfig(current_date=None)
+        config.validate()  # Should not raise
+
+    def test_current_date_validation_rejects_invalid_format(self):
+        """Test validate() rejects invalid date formats."""
+        invalid_dates = [
+            "2025-10-2",  # Too short
+            "2025-10-271",  # Too long
+            "2025/10/27",  # Wrong separator
+            "10-27-2025",  # Wrong order
+            "2025-10",  # Missing day
+            "invalid",  # Not a date
+        ]
+
+        for date in invalid_dates:
+            config = InferenceConfig(current_date=date)
+            with pytest.raises(ValueError, match="current_date must be YYYY-MM-DD format"):
+                config.validate()
+
+    def test_current_date_format_exactly_ten_characters(self):
+        """Test validate() checks current_date is exactly 10 characters."""
+        config = InferenceConfig(current_date="2025-10-27")
+        assert len(config.current_date) == 10
+        config.validate()  # Should not raise
+
+
+class TestNewFieldsIntegration:
+    """Integration tests for knowledge_cutoff and current_date fields."""
+
+    def test_all_harmony_fields_together(self):
+        """Test all Harmony fields including new ones work together."""
+        config = InferenceConfig(
+            use_harmony_format=True,
+            reasoning_level=ReasoningLevel.HIGH,
+            capture_reasoning=True,
+            show_reasoning=True,
+            knowledge_cutoff="2025-01",
+            current_date="2025-10-27",
+        )
+
+        config.validate()  # Should not raise
+
+        assert config.use_harmony_format is True
+        assert config.reasoning_level == ReasoningLevel.HIGH
+        assert config.capture_reasoning is True
+        assert config.show_reasoning is True
+        assert config.knowledge_cutoff == "2025-01"
+        assert config.current_date == "2025-10-27"
+
+    def test_from_env_loads_all_new_fields(self):
+        """Test from_env() loads all new Harmony fields."""
+        env_vars = {
+            "USE_HARMONY_FORMAT": "true",
+            "REASONING_LEVEL": "high",
+            "CAPTURE_REASONING": "true",
+            "SHOW_REASONING": "true",
+            "KNOWLEDGE_CUTOFF": "2025-03",
+            "CURRENT_DATE": "2025-10-27",
+        }
+
+        with patch.dict(os.environ, env_vars):
+            config = InferenceConfig.from_env()
+
+            assert config.use_harmony_format is True
+            assert config.reasoning_level == ReasoningLevel.HIGH
+            assert config.capture_reasoning is True
+            assert config.show_reasoning is True
+            assert config.knowledge_cutoff == "2025-03"
+            assert config.current_date == "2025-10-27"
+
+    def test_backward_compatibility_with_new_fields(self):
+        """Test old code patterns still work with new fields."""
+        # Old pattern: create config without specifying new fields
+        config = InferenceConfig(
+            temperature=0.8,
+            top_p=0.95,
+            max_tokens=1024,
+        )
+
+        # New fields should use defaults
+        assert config.knowledge_cutoff == "2024-06"
+        assert config.current_date is None
+
+        # Should validate successfully
+        config.validate()
+
+    def test_new_fields_preserved_with_existing_fields(self):
+        """Test new fields don't interfere with existing field loading."""
+        env_vars = {
+            "TEMPERATURE": "0.8",
+            "TOP_P": "0.95",
+            "MAX_TOKENS": "2048",
+            "KNOWLEDGE_CUTOFF": "2025-01",
+            "CURRENT_DATE": "2025-10-27",
+        }
+
+        with patch.dict(os.environ, env_vars):
+            config = InferenceConfig.from_env()
+
+            # Check existing fields still work
+            assert config.temperature == 0.8
+            assert config.top_p == 0.95
+            assert config.max_tokens == 2048
+
+            # Check new fields work
+            assert config.knowledge_cutoff == "2025-01"
+            assert config.current_date == "2025-10-27"
+
+
+class TestContractCompliance:
+    """Tests to verify compliance with integration contract."""
+
+    def test_harmony_config_contract_fields_exist(self):
+        """Verify all fields from HarmonyConfig contract exist."""
+        config = InferenceConfig()
+
+        # Fields from contract
+        assert hasattr(config, 'use_harmony_format')
+        assert hasattr(config, 'reasoning_level')
+        assert hasattr(config, 'capture_reasoning')
+        assert hasattr(config, 'show_reasoning')
+        assert hasattr(config, 'knowledge_cutoff')
+        assert hasattr(config, 'current_date')
+
+    def test_contract_default_values(self):
+        """Verify default values match contract specification."""
+        config = InferenceConfig()
+
+        assert config.use_harmony_format is True
+        assert config.reasoning_level == ReasoningLevel.MEDIUM
+        assert config.capture_reasoning is False
+        assert config.show_reasoning is False
+        assert config.knowledge_cutoff == "2024-06"
+        assert config.current_date is None
+
+    def test_contract_env_var_mapping(self):
+        """Verify environment variable mapping matches contract."""
+        env_vars = {
+            "USE_HARMONY_FORMAT": "true",
+            "REASONING_LEVEL": "medium",
+            "CAPTURE_REASONING": "false",
+            "SHOW_REASONING": "false",
+            "KNOWLEDGE_CUTOFF": "2024-06",
+            "CURRENT_DATE": "",  # Should auto-detect
+        }
+
+        with patch.dict(os.environ, env_vars):
+            config = InferenceConfig.from_env()
+
+            # Verify all fields loaded
+            assert config.use_harmony_format is True
+            assert config.reasoning_level == ReasoningLevel.MEDIUM
+            assert config.capture_reasoning is False
+            assert config.show_reasoning is False
+            assert config.knowledge_cutoff == "2024-06"
+            assert config.current_date is not None  # Auto-detected
+
+    def test_contract_validation_rules(self):
+        """Verify validation rules match contract specification."""
+        # Valid config should pass
+        config = InferenceConfig()
+        config.validate()  # Should not raise
+
+        # Invalid reasoning_level should fail
+        config = InferenceConfig()
+        config.reasoning_level = "invalid"
+        with pytest.raises(ValueError, match="reasoning_level must be ReasoningLevel enum"):
+            config.validate()
+
+        # Empty knowledge_cutoff should fail
+        config = InferenceConfig(knowledge_cutoff="")
+        with pytest.raises(ValueError, match="knowledge_cutoff cannot be empty"):
+            config.validate()
+
+        # Invalid date format should fail
+        config = InferenceConfig(current_date="invalid")
+        with pytest.raises(ValueError, match="current_date must be YYYY-MM-DD format"):
+            config.validate()

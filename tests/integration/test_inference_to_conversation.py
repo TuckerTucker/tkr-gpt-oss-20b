@@ -355,7 +355,9 @@ class TestFullInferenceConversationWorkflow:
         # Stream generation
         prompt = conv.format_prompt()
         tokens = []
-        for token in engine.generate_stream(prompt=prompt):
+        for token_dict in engine.generate_stream(prompt=prompt):
+            # Extract token string from dict (new format)
+            token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
             tokens.append(token)
 
         # Add streamed response to conversation

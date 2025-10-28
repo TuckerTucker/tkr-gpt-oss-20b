@@ -23,15 +23,19 @@ class Message:
 
     Attributes:
         role: Message role (system, user, assistant)
-        content: Message content text
+        content: Message content text (final channel for Harmony responses)
         timestamp: ISO format timestamp of message creation
         tokens: Estimated token count for this message
+        channels: Optional Harmony channels (final, analysis, commentary)
+        metadata: Optional metadata dictionary
     """
 
     role: str
     content: str
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     tokens: int = 0
+    channels: Optional[Dict[str, str]] = None
+    metadata: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         """Calculate tokens if not provided."""
@@ -47,12 +51,31 @@ class Message:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert message to dictionary."""
-        return asdict(self)
+        result = {
+            "role": self.role,
+            "content": self.content,
+            "timestamp": self.timestamp,
+            "tokens": self.tokens,
+        }
+        # Only include channels if present (avoid cluttering old-format exports)
+        if self.channels:
+            result["channels"] = self.channels
+        if self.metadata:
+            result["metadata"] = self.metadata
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Message":
         """Create message from dictionary."""
-        return cls(**data)
+        # Extract known fields, handle both old and new formats
+        return cls(
+            role=data["role"],
+            content=data["content"],
+            timestamp=data.get("timestamp", datetime.utcnow().isoformat()),
+            tokens=data.get("tokens", 0),
+            channels=data.get("channels"),
+            metadata=data.get("metadata"),
+        )
 
 
 class ConversationManager:
@@ -90,13 +113,21 @@ class ConversationManager:
             f"ConversationManager initialized (max_tokens={max_context_tokens})"
         )
 
-    def add_message(self, role: str, content: str) -> Message:
+    def add_message(
+        self,
+        role: str,
+        content: str,
+        channels: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Message:
         """
         Add message to conversation history.
 
         Args:
             role: Message role (system, user, assistant)
-            content: Message content
+            content: Message content (final channel for Harmony responses)
+            channels: Optional Harmony channels (final, analysis, commentary)
+            metadata: Optional metadata dictionary
 
         Returns:
             Created Message object
@@ -108,16 +139,84 @@ class ConversationManager:
             'user'
             >>> msg.content
             'Hello!'
+
+            >>> # Harmony response with channels
+            >>> msg = conv.add_message(
+            ...     "assistant",
+            ...     "Final response",
+            ...     channels={"final": "Final response", "analysis": "Reasoning..."}
+            ... )
+            >>> msg.channels["analysis"]
+            'Reasoning...'
         """
-        message = Message(role=role, content=content)
+        message = Message(
+            role=role,
+            content=content,
+            channels=channels,
+            metadata=metadata
+        )
         self.messages.append(message)
 
         logger.debug(
             f"Added message #{len(self.messages)} "
-            f"(role={role}, tokens={message.tokens})"
+            f"(role={role}, tokens={message.tokens}, "
+            f"has_channels={bool(channels)})"
         )
 
         return message
+
+    def add_harmony_response(
+        self,
+        parsed_response,  # Type: ParsedHarmonyResponse (avoid import)
+        role: str = "assistant"
+    ) -> Message:
+        """
+        Add a Harmony response to conversation history.
+
+        Convenience method for adding responses from HarmonyResponseParser.
+        Automatically extracts all channels and stores them.
+
+        Args:
+            parsed_response: ParsedHarmonyResponse from HarmonyResponseParser
+            role: Message role (default: "assistant")
+
+        Returns:
+            Created Message object
+
+        Examples:
+            >>> conv = ConversationManager()
+            >>> # Assume parsed is a ParsedHarmonyResponse
+            >>> msg = conv.add_harmony_response(parsed)
+            >>> msg.content  # Contains final channel
+            'User-facing response'
+            >>> msg.channels['analysis']  # Access reasoning
+            'Chain-of-thought...'
+        """
+        # Extract channels from parsed response
+        channels = {}
+        if parsed_response.final:
+            channels["final"] = parsed_response.final
+        if parsed_response.analysis:
+            channels["analysis"] = parsed_response.analysis
+        if parsed_response.commentary:
+            channels["commentary"] = parsed_response.commentary
+
+        # Include any additional channels
+        if parsed_response.channels:
+            channels.update(parsed_response.channels)
+
+        # Extract metadata
+        metadata = None
+        if parsed_response.metadata:
+            metadata = {"harmony_metadata": parsed_response.metadata}
+
+        # Add message with final channel as content
+        return self.add_message(
+            role=role,
+            content=parsed_response.final,
+            channels=channels if channels else None,
+            metadata=metadata
+        )
 
     def get_history(self) -> List[Message]:
         """
@@ -140,7 +239,7 @@ class ConversationManager:
         Format conversation into prompt string.
 
         Args:
-            template: Prompt template format (chatml, alpaca, vicuna)
+            template: Prompt template format (chatml, alpaca, vicuna, harmony)
 
         Returns:
             Formatted prompt string
@@ -167,6 +266,38 @@ class ConversationManager:
         )
 
         return formatted
+
+    def get_messages_for_harmony(self) -> List[Dict[str, str]]:
+        """
+        Get messages in format suitable for HarmonyPromptBuilder.
+
+        This method extracts messages in the simple dict format expected by
+        HarmonyPromptBuilder.build_conversation(). Uses the final channel
+        (content field) for assistant messages.
+
+        Returns:
+            List of message dicts with 'role' and 'content' keys
+
+        Examples:
+            >>> conv = ConversationManager()
+            >>> conv.add_message("user", "Hello!")
+            >>> conv.add_message("assistant", "Hi!", channels={"final": "Hi!"})
+            >>> messages = conv.get_messages_for_harmony()
+            >>> messages[0]
+            {'role': 'user', 'content': 'Hello!'}
+        """
+        messages = []
+        for msg in self.messages:
+            messages.append({
+                "role": msg.role,
+                "content": msg.content  # Content already contains final channel
+            })
+
+        logger.debug(
+            f"Extracted {len(messages)} messages for Harmony format"
+        )
+
+        return messages
 
     def clear(self) -> None:
         """

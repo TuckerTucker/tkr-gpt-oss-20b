@@ -1,17 +1,18 @@
-# Migration Guide: Legacy Format to Harmony
+# Migration Guide: Upgrading to openai-harmony Package
 
-This guide helps you migrate from the legacy ChatML format to the new Harmony multi-channel format.
+This guide helps you migrate to the new implementation using the official **openai-harmony** package (v0.0.4+).
 
 ## Overview
 
-**Good news**: Harmony is fully backward compatible. You don't need to change any existing code unless you want to use the new multi-channel features.
+**Good news**: The migration is fully backward compatible. Existing code continues to work without changes.
 
 ### What Changed
 
-- **Format**: ChatML → Harmony (with channel support)
-- **Response Structure**: Single text → Multi-channel (analysis, commentary, final)
-- **Configuration**: New options for reasoning levels and capture
-- **API**: Extended `GenerationResult` with optional reasoning fields
+- **Implementation**: Custom string-based → Official token-based (openai-harmony package)
+- **Imports**: `src.prompts.harmony` → `src.prompts.harmony_native`
+- **API**: Enhanced with `HarmonyPromptBuilder` and `HarmonyResponseParser`
+- **Configuration**: New fields: `knowledge_cutoff`, `current_date`
+- **Performance**: Improved with token-based parsing (<5ms vs regex-based)
 
 ### What Stayed the Same
 
@@ -19,15 +20,76 @@ This guide helps you migrate from the legacy ChatML format to the new Harmony mu
 - `GenerationResult.text` still returns the final response
 - Default behavior is unchanged for end users
 - No breaking changes to core APIs
+- Conversation format remains compatible
 
 ## Quick Migration Checklist
 
-- [ ] Update Python dependencies (ensure `openai-harmony` is available)
-- [ ] Review `.env` file and add Harmony settings (optional)
+- [ ] Update Python dependencies (`pip install -r requirements.txt` - openai-harmony>=0.0.4)
+- [ ] Review `.env` file and add new Harmony settings: `KNOWLEDGE_CUTOFF`, `CURRENT_DATE` (optional)
 - [ ] Test existing code (should work without changes)
+- [ ] Update imports if using old `HarmonyEncoder` directly (see API Changes below)
 - [ ] Optionally enable reasoning capture for new features
 - [ ] Update UI/CLI code to display reasoning (optional)
 - [ ] No changes needed for production if you only use `result.text`
+
+## API Changes
+
+### Old API (Deprecated)
+
+If you were using the old string-based API directly:
+
+```python
+# OLD (no longer available)
+from src.prompts.harmony import HarmonyEncoder, ParsedResponse
+from src.prompts.harmony_channels import extract_channel
+
+encoder = HarmonyEncoder()
+parsed = encoder.parse_response(response_text)
+final = parsed.final
+analysis = parsed.analysis
+raw = parsed.raw  # Field removed
+```
+
+### New API (openai-harmony)
+
+```python
+# NEW (openai-harmony package)
+from src.prompts.harmony_native import (
+    HarmonyPromptBuilder,
+    HarmonyResponseParser,
+    ParsedHarmonyResponse
+)
+
+# Building prompts
+builder = HarmonyPromptBuilder()
+system_prompt = builder.build_system_prompt(
+    reasoning_level=ReasoningLevel.MEDIUM,
+    knowledge_cutoff="2024-06",
+    current_date="2025-10-27"
+)
+
+# Parsing responses
+parser = HarmonyResponseParser()
+parsed = parser.parse_response_tokens(token_ids)
+# Or: parsed = parser.parse_response_text(response_text, tokenizer)
+
+final = parsed.final
+analysis = parsed.analysis
+channels = parsed.channels  # Dict of all channels
+metadata = parsed.metadata  # Parsing metadata
+```
+
+### Key Differences
+
+| Feature | Old API | New API |
+|---------|---------|---------|
+| **Package** | Custom implementation | Official openai-harmony |
+| **Prompt Building** | String concatenation | Token-based with SystemContent/DeveloperContent |
+| **Response Parsing** | Regex-based | StreamableParser (token-based) |
+| **ParsedResponse.raw** | Available | Removed (use `channels` dict instead) |
+| **Performance** | ~5-10ms parsing | <5ms parsing |
+| **Configuration** | Basic | Includes knowledge_cutoff, current_date |
+| **Validation** | Limited | `validate_harmony_format()` method |
 
 ## Comparison: Legacy vs Harmony
 
@@ -226,7 +288,7 @@ result.channels          # Dict of all channels (if captured)
 
 ### InferenceConfig Extended
 
-New configuration options for Harmony control.
+New configuration options for Harmony control with openai-harmony package.
 
 **Before**:
 ```python
@@ -253,13 +315,15 @@ config = InferenceConfig(
     use_harmony_format=True,                # Enable multi-channel
     reasoning_level=ReasoningLevel.MEDIUM,  # LOW/MEDIUM/HIGH
     capture_reasoning=False,                # Store analysis channel
-    show_reasoning=False                    # Display in CLI
+    show_reasoning=False,                   # Display in CLI
+    knowledge_cutoff="2024-06",             # NEW: Model knowledge cutoff
+    current_date="2025-10-27"               # NEW: Current date (auto-detected if None)
 )
 ```
 
 ### Environment Variables
 
-New environment variables for Harmony configuration.
+New environment variables for Harmony configuration with openai-harmony.
 
 **Before** (`.env`):
 ```bash
@@ -282,13 +346,25 @@ USE_HARMONY_FORMAT=true      # Enable/disable Harmony
 REASONING_LEVEL=medium       # low/medium/high
 CAPTURE_REASONING=false      # Capture analysis channel
 SHOW_REASONING=false         # Display reasoning traces
+KNOWLEDGE_CUTOFF=2024-06     # NEW: Model knowledge cutoff date
+CURRENT_DATE=2025-10-27      # NEW: Current date (auto-detected if omitted)
 ```
 
 ## Breaking Changes
 
-**None!** The migration is fully backward compatible.
+**None!** The migration is fully backward compatible for end users.
 
 However, be aware of these considerations:
+
+### Deprecated Modules (Internal Only)
+
+If you were directly importing the old Harmony implementation:
+
+- ❌ `src.prompts.harmony` module - Use `src.prompts.harmony_native` instead
+- ❌ `src.prompts.harmony_channels` module - Use `HarmonyResponseParser` methods instead
+- ❌ `ParsedResponse.raw` field - Use `ParsedHarmonyResponse.channels` dict instead
+
+**Note**: These were internal APIs. If you're using `InferenceEngine` and `result.text`, no changes needed.
 
 ### Potential Issues
 
@@ -298,7 +374,7 @@ However, be aware of these considerations:
    - **Solution**: Start with `medium` (default) or `low`
 
 2. **Performance Impact**
-   - Negligible parsing overhead (< 5ms)
+   - Improved parsing performance (< 5ms with openai-harmony)
    - More tokens = slightly slower generation with high reasoning
    - **Solution**: Use appropriate reasoning level for task
 
@@ -307,9 +383,10 @@ However, be aware of these considerations:
    - Always use `result.text` for end users, not `result.reasoning`
    - **Solution**: Filter appropriately in production
 
-4. **Legacy Template Compatibility**
-   - Old ChatML templates still work but don't leverage multi-channel
-   - **Solution**: No action needed, but consider updating for new features
+4. **New Configuration Fields**
+   - `knowledge_cutoff` and `current_date` are now available
+   - `current_date` auto-detects if not provided
+   - **Solution**: No action needed, defaults work well
 
 ## Testing Your Migration
 

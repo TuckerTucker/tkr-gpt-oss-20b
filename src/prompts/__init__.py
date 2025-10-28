@@ -6,12 +6,14 @@ This module provides tools for formatting prompts and managing system prompts:
 - Pre-configured system prompt presets
 - Custom template and preset creation
 - Fluent builders for complex prompts
+- Harmony format support (openai-harmony package)
 
 Main exports:
 - Template functions: format_message, format_conversation
 - Template classes: PromptTemplate
 - Preset functions: get_preset, list_presets
 - Builder classes: SystemPromptBuilder
+- Harmony classes: HarmonyPromptBuilder, HarmonyResponseParser
 """
 
 from .templates import (
@@ -36,19 +38,12 @@ from .presets import (
     SystemPromptBuilder,
 )
 
-from .harmony_channels import (
-    extract_channel,
-    extract_all_channels,
-    validate_harmony_format,
-    format_reasoning_trace,
-)
-
-from .harmony import (
-    HarmonyEncoder,
-    HarmonyMessage,
-    ParsedResponse,
-    Role,
-    Channel,
+from .harmony_native import (
+    HarmonyPromptBuilder,
+    HarmonyResponseParser,
+    HarmonyPrompt,
+    ParsedHarmonyResponse,
+    ReasoningLevel,
 )
 
 __all__ = [
@@ -74,17 +69,12 @@ __all__ = [
     "create_custom_prompt",
     # Preset classes
     "SystemPromptBuilder",
-    # Harmony channel utilities
-    "extract_channel",
-    "extract_all_channels",
-    "validate_harmony_format",
-    "format_reasoning_trace",
-    # Harmony encoder
-    "HarmonyEncoder",
-    "HarmonyMessage",
-    "ParsedResponse",
-    "Role",
-    "Channel",
+    # Harmony (openai-harmony package)
+    "HarmonyPromptBuilder",
+    "HarmonyResponseParser",
+    "HarmonyPrompt",
+    "ParsedHarmonyResponse",
+    "ReasoningLevel",
 ]
 
 __version__ = "1.0.0"

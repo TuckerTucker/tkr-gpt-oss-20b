@@ -17,6 +17,9 @@ prompt-toolkit>=3.0.43
 python-dotenv>=1.0.0
 pyyaml>=6.0.1
 
+# Harmony format support
+openai-harmony>=0.0.4
+
 # Development dependencies
 pytest>=7.4.3
 pytest-asyncio>=0.21.1

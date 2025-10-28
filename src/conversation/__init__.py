@@ -2,23 +2,29 @@
 Conversation management module.
 
 This module provides tools for managing multi-turn conversations, including:
-- Message history management
+- Message history management with Harmony channel support
 - Context window tracking and truncation
 - Token counting and estimation
-- Conversation persistence (save/load)
+- Conversation persistence (save/load) with channel preservation
 - Export to multiple formats (markdown, JSON, text)
 - Statistics tracking and analytics
 - Advanced search and filtering
 
 Main exports:
 - ConversationManager: Core conversation management
-- Message: Single message dataclass
+- Message: Single message dataclass with Harmony channels
 - ContextWindowTracker: Context window management
 - ConversationPersistence: Save/load conversations
 - ConversationStats: Statistics tracking
 - Token utilities: Token counting functions
 - Export functions: Export to various formats
 - Search functions: Advanced message search and filtering
+
+Harmony Integration (Wave 3):
+- Messages can store multi-channel Harmony responses (final, analysis, commentary)
+- ConversationManager.add_harmony_response() for adding parsed Harmony responses
+- ConversationManager.get_messages_for_harmony() for HarmonyPromptBuilder integration
+- Backward compatible with non-Harmony messages
 """
 
 from .history import ConversationManager, Message
@@ -97,4 +103,4 @@ __all__ = [
     "get_conversation_context",
 ]
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"  # Harmony integration with channel support

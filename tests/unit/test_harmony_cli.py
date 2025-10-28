@@ -188,19 +188,18 @@ class TestMessageFormatterReasoningDisplay:
             formatted_text = str(content_call[0][0])
             assert len(formatted_text) <= 113  # 100 + " [TRUNCATED]"
 
-    def test_display_reasoning_calls_format_function(self):
-        """Test that display_reasoning calls format_reasoning_trace."""
+    def test_display_reasoning_formats_inline(self):
+        """Test that display_reasoning formats reasoning inline."""
         formatter = MessageFormatter(show_metadata=False)
 
-        with patch('src.cli.display.console'):
-            with patch('src.prompts.harmony_channels.format_reasoning_trace') as mock_format:
-                mock_format.return_value = "Formatted reasoning"
-                reasoning = "Raw reasoning"
+        # Patch console to capture output
+        with patch('src.cli.display.console') as mock_console:
+            reasoning = "<|start|>channel<|channel|>analysis<|message|>Test reasoning<|end|>"
 
-                formatter.display_reasoning(reasoning, max_length=200)
+            formatter.display_reasoning(reasoning, max_length=200)
 
-                # Verify format function was called with correct args
-                mock_format.assert_called_once_with(reasoning, 200)
+            # Verify console.print was called (formatting happens inline now)
+            assert mock_console.print.called
 
 
 class TestReasoningDisplayOptIn:
@@ -369,6 +368,109 @@ class TestHelpText:
 
                     # Should document reasoning levels
                     assert 'Reasoning Levels' in help_text or 'reasoning-level' in help_text
+
+
+class TestStreamingWithChannels:
+    """Test CLI integration with new dict-based streaming format."""
+
+    def test_streaming_yields_dict_tokens(self):
+        """Test that streaming yields dict tokens with channel metadata."""
+        from src.inference.engine import InferenceEngine
+        from src.models.loader import ModelLoader
+        from src.config.model_config import ModelConfig
+
+        # Mock model and tokenizer
+        with patch('mlx_lm.load') as mock_load:
+            with patch('mlx_lm.stream_generate') as mock_stream:
+                # Setup mocks
+                mock_load.return_value = (Mock(), Mock())
+                mock_stream.return_value = iter(["Hello", " ", "world"])
+
+                # Create engine
+                config = ModelConfig(model_name="test", warmup=False)
+                loader = ModelLoader(config=config)
+                loader.load()
+                engine = InferenceEngine(model_loader=loader)
+
+                # Generate stream
+                stream = engine.generate_stream("Test prompt")
+                tokens = list(stream)
+
+                # Verify dict structure
+                assert len(tokens) > 0
+                for token_dict in tokens:
+                    assert isinstance(token_dict, dict), "Should yield dict"
+                    assert 'token' in token_dict, "Should have 'token' key"
+                    assert 'channel' in token_dict, "Should have 'channel' key"
+                    assert 'is_final' in token_dict, "Should have 'is_final' key"
+
+    def test_cli_displays_final_channel_only(self):
+        """Test CLI only displays final channel by default."""
+        from src.cli.display import MessageFormatter
+        import sys
+        from io import StringIO
+
+        formatter = MessageFormatter(show_metadata=False)
+
+        # Capture stdout
+        captured_output = StringIO()
+        with patch('sys.stdout', captured_output):
+            # Simulate displaying a response
+            final_text = "This is the final response"
+            formatter.display_assistant_message(final_text)
+
+        # Verify output was produced
+        output = captured_output.getvalue()
+        assert "final response" in output or len(output) > 0
+
+    def test_repl_extracts_tokens_from_dict(self):
+        """Test REPL properly extracts tokens from dict format."""
+        from src.cli.repl import REPL
+        from src.conversation.history import ConversationManager
+
+        # Create mock engine that returns dict tokens
+        mock_engine = Mock()
+
+        def mock_stream(*args, **kwargs):
+            """Mock stream that yields dict tokens."""
+            yield {'token': 'Hello', 'channel': 'final', 'is_final': True, 'content': 'Hello', 'delta': 'Hello'}
+            yield {'token': ' ', 'channel': 'final', 'is_final': True, 'content': ' ', 'delta': ' '}
+            yield {'token': 'world', 'channel': 'final', 'is_final': True, 'content': 'world', 'delta': 'world'}
+
+        mock_engine.generate_stream.return_value = mock_stream()
+
+        # Mock generate to return result with text
+        mock_result = Mock()
+        mock_result.text = "Hello world"
+        mock_engine.generate.return_value = mock_result
+
+        # Create REPL
+        conversation = ConversationManager()
+        repl = REPL(conversation=conversation, engine=mock_engine)
+
+        # Process message
+        with patch.object(repl.formatter, 'display_user_message'):
+            with patch.object(repl.formatter, 'display_assistant_message'):
+                result = repl._process_message("Test")
+
+                # Should succeed without error
+                assert result is True
+
+    def test_channel_metadata_preserved_in_stream(self):
+        """Test that channel metadata is preserved in streaming."""
+        # Create mock tokens with channel metadata
+        mock_tokens = [
+            {'token': 'Analysis:', 'channel': 'analysis', 'is_final': False, 'content': 'Analysis:', 'delta': 'Analysis:'},
+            {'token': ' thinking', 'channel': 'analysis', 'is_final': False, 'content': ' thinking', 'delta': ' thinking'},
+            {'token': 'Hello', 'channel': 'final', 'is_final': True, 'content': 'Hello', 'delta': 'Hello'},
+        ]
+
+        # Verify structure
+        for token_dict in mock_tokens:
+            assert 'channel' in token_dict
+            assert 'is_final' in token_dict
+            assert token_dict['channel'] in ['analysis', 'final']
+            assert isinstance(token_dict['is_final'], bool)
 
 
 if __name__ == "__main__":

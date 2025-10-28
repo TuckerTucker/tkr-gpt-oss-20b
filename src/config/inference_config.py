@@ -37,6 +37,8 @@ class InferenceConfig:
         reasoning_level: Model reasoning effort (LOW/MEDIUM/HIGH)
         capture_reasoning: Store analysis channel in results
         show_reasoning: Display reasoning traces in CLI
+        knowledge_cutoff: Model knowledge cutoff date (e.g., "2024-06")
+        current_date: Current date for context (auto-detected if None)
         streaming: Enable token-by-token streaming output
         stop_sequences: List of sequences that stop generation
     """
@@ -53,6 +55,8 @@ class InferenceConfig:
     reasoning_level: ReasoningLevel = ReasoningLevel.MEDIUM
     capture_reasoning: bool = False
     show_reasoning: bool = False
+    knowledge_cutoff: str = "2024-06"
+    current_date: Optional[str] = None  # Auto-detect if None
 
     # Streaming
     streaming: bool = True
@@ -102,6 +106,22 @@ class InferenceConfig:
                 f"reasoning_level must be ReasoningLevel enum, got {type(self.reasoning_level)}"
             )
 
+        # Validate knowledge_cutoff
+        if not self.knowledge_cutoff:
+            raise ValueError("knowledge_cutoff cannot be empty")
+
+        # Validate current_date format if provided
+        if self.current_date:
+            if len(self.current_date) != 10:
+                raise ValueError(
+                    f"current_date must be YYYY-MM-DD format, got {self.current_date}"
+                )
+            # Basic format check: should be YYYY-MM-DD
+            if not (self.current_date[4] == '-' and self.current_date[7] == '-'):
+                raise ValueError(
+                    f"current_date must be YYYY-MM-DD format, got {self.current_date}"
+                )
+
     @classmethod
     def from_env(cls) -> "InferenceConfig":
         """Load configuration from environment variables.
@@ -116,6 +136,8 @@ class InferenceConfig:
             REASONING_LEVEL: Reasoning effort - low/medium/high (default: medium)
             CAPTURE_REASONING: Store analysis channel (default: false)
             SHOW_REASONING: Display reasoning traces (default: false)
+            KNOWLEDGE_CUTOFF: Model knowledge cutoff date (default: 2024-06)
+            CURRENT_DATE: Current date for context (default: auto-detect)
             STREAMING: Enable streaming output (default: true)
             STOP_SEQUENCES: Comma-separated stop sequences (optional)
 
@@ -146,6 +168,15 @@ class InferenceConfig:
         capture_reasoning = get_bool("CAPTURE_REASONING", False)
         show_reasoning = get_bool("SHOW_REASONING", False)
 
+        # Load knowledge cutoff
+        knowledge_cutoff = os.getenv("KNOWLEDGE_CUTOFF", "2024-06")
+
+        # Load current date (with auto-detection)
+        current_date = os.getenv("CURRENT_DATE")
+        if current_date is None or current_date.strip() == "":
+            from datetime import datetime
+            current_date = datetime.now().strftime('%Y-%m-%d')
+
         return cls(
             temperature=float(os.getenv("TEMPERATURE", "0.7")),
             top_p=float(os.getenv("TOP_P", "0.9")),
@@ -156,6 +187,8 @@ class InferenceConfig:
             reasoning_level=reasoning_level,
             capture_reasoning=capture_reasoning,
             show_reasoning=show_reasoning,
+            knowledge_cutoff=knowledge_cutoff,
+            current_date=current_date,
             streaming=get_bool("STREAMING", True),
             stop_sequences=stop_sequences,
         )

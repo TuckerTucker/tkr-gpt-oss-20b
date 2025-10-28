@@ -100,11 +100,13 @@ class TestStreamingWithController:
         with patch('src.inference.engine.mlx_lm', MockMLXModule):
             stream = mock_engine.generate_stream("test prompt")
 
-            for token in stream:
+            for token_dict in stream:
                 controller.wait_if_paused()
                 if controller.is_cancelled:
                     break
 
+                # Extract token string from dict (new format)
+                token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
                 buffer.add_token(token)
                 controller.increment_tokens()
 
@@ -125,7 +127,7 @@ class TestStreamingWithController:
         with patch('src.inference.engine.mlx_lm', MockMLXModule):
             stream = mock_engine.generate_stream("test")
 
-            for i, token in enumerate(stream):
+            for i, token_dict in enumerate(stream):
                 # Pause after 5 tokens
                 if i == 5:
                     controller.pause()
@@ -134,6 +136,8 @@ class TestStreamingWithController:
                     controller.resume()
 
                 controller.wait_if_paused()
+                # Extract token string from dict (new format)
+                token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
                 buffer.add_token(token)
                 controller.increment_tokens()
                 tokens_collected.append(token)
@@ -154,13 +158,15 @@ class TestStreamingWithController:
         with patch('src.inference.engine.mlx_lm', MockMLXModule):
             stream = mock_engine.generate_stream("test")
 
-            for i, token in enumerate(stream):
+            for i, token_dict in enumerate(stream):
                 if i == 3:
                     controller.cancel()
 
                 if controller.is_cancelled:
                     break
 
+                # Extract token string from dict (new format)
+                token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
                 buffer.add_token(token)
                 controller.increment_tokens()
 
@@ -182,7 +188,7 @@ class TestStreamingWithController:
         with patch('src.inference.engine.mlx_lm', MockMLXModule):
             stream = mock_engine.generate_stream("test")
 
-            for token in stream:
+            for token_dict in stream:
                 controller.increment_tokens()
 
         controller.complete()
@@ -212,7 +218,9 @@ class TestStreamingWithBuffering:
         with patch('src.inference.engine.mlx_lm', MockMLXModule):
             stream = mock_engine.generate_stream("test")
 
-            for token in stream:
+            for token_dict in stream:
+                # Extract token string from dict (new format)
+                token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
                 buffer.add_token(token)
 
         # Final flush for remaining tokens
@@ -291,7 +299,9 @@ class TestOptimizedStreaming:
             stream = engine.generate_stream("test", optimized_params)
 
             tokens = []
-            for token in stream:
+            for token_dict in stream:
+                # Extract token string from dict (new format)
+                token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
                 tokens.append(token)
 
             assert len(tokens) > 0
@@ -354,11 +364,13 @@ class TestFullStreamingPipeline:
 
             stream = engine.generate_stream("test prompt", optimized_params)
 
-            for token in stream:
+            for token_dict in stream:
                 controller.wait_if_paused()
                 if controller.is_cancelled:
                     break
 
+                # Extract token string from dict (new format)
+                token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
                 buffer.add_token(token)
                 controller.increment_tokens()
 
@@ -395,7 +407,9 @@ class TestEdgeCases:
             controller.start()
 
             stream = engine.generate_stream("test")
-            for token in stream:
+            for token_dict in stream:
+                # Extract token string from dict (new format)
+                token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
                 buffer.add_token(token)
                 controller.increment_tokens()
 
@@ -417,7 +431,9 @@ class TestEdgeCases:
             buffer = TokenBuffer()
 
             stream = engine.generate_stream("test")
-            for token in stream:
+            for token_dict in stream:
+                # Extract token string from dict (new format)
+                token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
                 buffer.add_token(token)
 
             assert buffer.get_text() == special_chars

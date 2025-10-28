@@ -3,6 +3,15 @@ Message formatting and display utilities.
 
 Handles formatting of chat messages, metadata display,
 and other UI elements.
+
+Harmony Integration:
+    This module displays Harmony multi-channel responses:
+    - Main response: GenerationResult.text (from ParsedHarmonyResponse.final)
+    - Reasoning trace: GenerationResult.reasoning (from ParsedHarmonyResponse.analysis)
+    - Commentary: GenerationResult.commentary (from ParsedHarmonyResponse.commentary)
+
+    The display_reasoning() method formats and displays internal reasoning
+    traces from the analysis channel when --show-reasoning flag is enabled.
 """
 
 from typing import Dict, Optional, List, Iterator
@@ -70,21 +79,45 @@ class MessageFormatter:
             self._display_metadata(metadata)
 
     def display_reasoning(self, reasoning: str, max_length: int = 500) -> None:
-        """Display reasoning trace from analysis channel.
+        """Display reasoning trace from Harmony analysis channel.
+
+        This displays the internal reasoning/chain-of-thought from the model's
+        analysis channel. This is opt-in via --show-reasoning flag.
+
+        Harmony Integration:
+            - Expects reasoning text from GenerationResult.reasoning
+            - GenerationResult.reasoning contains ParsedHarmonyResponse.analysis
+            - Only displayed when config.show_reasoning=True
 
         Args:
             reasoning: Raw reasoning text from analysis channel
-            max_length: Maximum length before truncation
-        """
-        from src.prompts.harmony_channels import format_reasoning_trace
+            max_length: Maximum length before truncation (default: 500)
 
+        Examples:
+            >>> formatter = MessageFormatter()
+            >>> # Reasoning from GenerationResult
+            >>> result = engine.generate("Hello")
+            >>> if result.reasoning:
+            ...     formatter.display_reasoning(result.reasoning)
+        """
         if not reasoning:
             return
 
-        # Format and truncate reasoning
-        formatted = format_reasoning_trace(reasoning, max_length)
+        # Format and truncate reasoning (inline implementation)
+        # Remove Harmony markers if present
+        import re
+        cleaned = reasoning
+        cleaned = re.sub(r"<\|start\|>[^<]*<\|channel\|>[^<]*<\|message\|>", "", cleaned)
+        cleaned = re.sub(r"<\|end\|>", "", cleaned)
+        cleaned = cleaned.strip()
 
-        # Display with distinct styling
+        # Truncate if necessary
+        if len(cleaned) > max_length:
+            formatted = cleaned[:max_length].rstrip() + " [TRUNCATED]"
+        else:
+            formatted = cleaned
+
+        # Display with distinct styling to differentiate from main response
         console.print()
         console.print("─" * 50, style="dim cyan")
         console.print("🧠 Reasoning:", style="bold cyan")
@@ -134,7 +167,7 @@ class MessageFormatter:
 class ConversationDisplay:
     """Display full conversation history"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize conversation display"""
         self.formatter = MessageFormatter(show_metadata=False)
 

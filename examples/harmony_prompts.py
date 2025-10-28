@@ -1,38 +1,45 @@
 #!/usr/bin/env python3
 """
-Harmony Format Examples
+Harmony Format Examples - openai-harmony Implementation
 
-This script demonstrates how to use the Harmony multi-channel format
-for enhanced reasoning, debugging, and transparency.
+This file demonstrates how to use the new Harmony format implementation
+with the official openai-harmony package.
 
-Examples included:
-1. Summarization with reasoning display
-2. Extraction with citations
-3. Chat with reasoning traces
-4. Developer role with analysis access
-5. Accessing and using reasoning traces
+Examples:
+1. Basic Usage - Minimal setup and usage
+2. Reasoning Levels - LOW/MEDIUM/HIGH comparison
+3. Multi-Turn Conversations - Conversation history
+4. Presets Integration - Using preset helpers
+5. Streaming with Channels - Real-time parsing
+6. Complete Workflow - End-to-end example
 
-Run: python examples/harmony_prompts.py
+Requirements:
+- openai-harmony >= 0.0.4
+- MLX-based inference engine
+
+Author: tkr-gpt-oss-20b
+Updated: 2025-10-27 (Harmony Replacement - Wave 5)
 """
 
 import sys
 from pathlib import Path
+from typing import List, Dict
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.config.inference_config import InferenceConfig, ReasoningLevel
-from src.config.model_config import ModelConfig
-from src.models.loader import ModelLoader
-from src.inference.engine import InferenceEngine
-from src.sampling.params import SamplingParams
-from src.prompts.harmony import HarmonyEncoder, HarmonyMessage, Role, Channel
-from src.prompts.harmony_channels import (
-    extract_channel,
-    extract_all_channels,
-    format_reasoning_trace
+from src.prompts.harmony_native import (
+    HarmonyPromptBuilder,
+    HarmonyResponseParser,
+    ReasoningLevel,
+    HarmonyPrompt,
+    ParsedHarmonyResponse
 )
+from src.prompts.presets import get_preset, get_developer_content
+
+# For demonstration purposes, we'll use mock tokenization and responses
+# In production, use the actual MLX tokenizer and inference engine
 
 
 def print_section(title: str):
@@ -42,500 +49,730 @@ def print_section(title: str):
     print("=" * 70 + "\n")
 
 
-def example_1_summarization_with_reasoning():
-    """
-    Example 1: Summarization with Reasoning Display
+def print_subsection(title: str):
+    """Print a subsection header."""
+    print("\n" + "-" * 70)
+    print(f" {title}")
+    print("-" * 70)
 
-    Shows how to use Harmony to see the model's reasoning process
-    while performing a summarization task.
-    """
-    print_section("Example 1: Summarization with Reasoning")
 
-    # Configure with reasoning capture enabled
-    config = InferenceConfig(
-        use_harmony_format=True,
+def example_1_basic_usage():
+    """
+    Example 1: Basic Usage - Minimal Setup and Usage
+
+    Demonstrates:
+    - Creating a HarmonyPromptBuilder
+    - Building a system prompt with default reasoning level
+    - Building a simple conversation
+    - Basic usage without complexity
+
+    This is the simplest way to use Harmony format.
+    """
+    print_section("Example 1: Basic Usage")
+
+    # Step 1: Create the builder
+    builder = HarmonyPromptBuilder()
+    print("✓ Created HarmonyPromptBuilder")
+
+    # Step 2: Build system prompt with default (MEDIUM) reasoning
+    system_prompt = builder.build_system_prompt(
         reasoning_level=ReasoningLevel.MEDIUM,
-        capture_reasoning=True,  # Store reasoning in result
-        show_reasoning=False,    # We'll display it manually
-        temperature=0.7,
-        max_tokens=512
+        knowledge_cutoff="2024-06",
+        current_date="2025-10-27"
     )
 
-    print("Configuration:")
-    print(f"  - Harmony enabled: {config.use_harmony_format}")
-    print(f"  - Reasoning level: {config.reasoning_level.value}")
-    print(f"  - Capture reasoning: {config.capture_reasoning}")
+    print(f"\n✓ Built system prompt:")
+    print(f"  - Tokens: {len(system_prompt.token_ids)}")
+    print(f"  - Reasoning level: {system_prompt.metadata['reasoning_level']}")
+    print(f"  - Text preview: {system_prompt.text[:100]}...")
 
-    # Sample text to summarize
-    article = """
-    Artificial intelligence has made remarkable progress in recent years,
-    particularly in natural language processing. Large language models can
-    now generate coherent text, answer questions, and even write code.
-    However, these models also face challenges including bias, hallucinations,
-    and high computational costs. Researchers are working on making models
-    more efficient, reliable, and transparent.
-    """
-
-    print("\nArticle to summarize:")
-    print(article.strip())
-
-    # Mock generation for demo (in real usage, this would call the model)
-    print("\n[Note: This is a demo with mock responses. In production, connect to a real model.]")
-
-    # Simulated Harmony response from model
-    mock_response = """
-<|start|>assistant<|channel|>analysis<|message|>
-Let me analyze this article step by step:
-1. Main topic: Recent AI progress, specifically in NLP
-2. Key achievements: Text generation, Q&A, code writing
-3. Key challenges: Bias, hallucinations, computational cost
-4. Current work: Efficiency, reliability, transparency improvements
-
-I should summarize these four main points concisely.
-<|end|>
-<|start|>assistant<|channel|>final<|message|>
-AI, especially in natural language processing, has advanced significantly with large language
-models capable of text generation, question answering, and coding. However, challenges remain
-including bias, hallucinations, and high computational costs. Researchers are focusing on
-improving efficiency, reliability, and transparency.
-<|end|>
-"""
-
-    # Parse the response using HarmonyEncoder
-    encoder = HarmonyEncoder()
-    parsed = encoder.parse_response(mock_response)
-
-    print("\n--- Final Summary (User-Facing) ---")
-    print(parsed.final)
-
-    print("\n--- Reasoning Trace (Developer View) ---")
-    if parsed.analysis:
-        formatted = format_reasoning_trace(parsed.analysis, max_length=500)
-        print(formatted)
-    else:
-        print("No reasoning captured")
-
-    print("\n--- All Channels ---")
-    channels = extract_all_channels(mock_response)
-    for channel_name, content in channels.items():
-        print(f"\n[{channel_name.upper()}]")
-        print(content[:200] + "..." if len(content) > 200 else content)
-
-
-def example_2_extraction_with_citations():
-    """
-    Example 2: Data Extraction with Low Reasoning
-
-    Demonstrates using low reasoning level for fast, straightforward
-    extraction tasks where heavy analysis isn't needed.
-    """
-    print_section("Example 2: Data Extraction with Low Reasoning")
-
-    # Configure for fast extraction
-    config = InferenceConfig(
-        use_harmony_format=True,
-        reasoning_level=ReasoningLevel.LOW,  # Minimal reasoning for speed
-        capture_reasoning=True,
-        temperature=0.3,  # Lower temperature for factual extraction
-        max_tokens=256
-    )
-
-    print("Configuration:")
-    print(f"  - Reasoning level: {config.reasoning_level.value} (fast)")
-    print(f"  - Temperature: {config.temperature} (focused)")
-
-    # Sample text with structured data
-    text = """
-    Contact Information:
-    Name: Dr. Alice Johnson
-    Email: alice.johnson@example.com
-    Phone: +1-555-0123
-    Department: Research & Development
-    """
-
-    print("\nText to extract from:")
-    print(text.strip())
-
-    # Mock extraction response
-    mock_response = """
-<|start|>assistant<|channel|>analysis<|message|>
-Extract structured data: name, email, phone, department.
-<|end|>
-<|start|>assistant<|channel|>final<|message|>
-Extracted Information:
-- Name: Dr. Alice Johnson
-- Email: alice.johnson@example.com
-- Phone: +1-555-0123
-- Department: Research & Development
-<|end|>
-"""
-
-    encoder = HarmonyEncoder()
-    parsed = encoder.parse_response(mock_response)
-
-    print("\n--- Extracted Data ---")
-    print(parsed.final)
-
-    print("\n--- Reasoning (Minimal for Low Level) ---")
-    if parsed.analysis:
-        print(f"Analysis: {parsed.analysis}")
-        print("\nNote: Low reasoning level produces minimal analysis for speed.")
-    else:
-        print("No reasoning captured")
-
-
-def example_3_chat_with_reasoning():
-    """
-    Example 3: Chat with High Reasoning
-
-    Shows how high reasoning level provides detailed chain-of-thought
-    for complex questions.
-    """
-    print_section("Example 3: Chat with High Reasoning")
-
-    # Configure for maximum reasoning
-    config = InferenceConfig(
-        use_harmony_format=True,
-        reasoning_level=ReasoningLevel.HIGH,  # Maximum reasoning
-        capture_reasoning=True,
-        show_reasoning=True,
-        temperature=0.8,
-        max_tokens=1024
-    )
-
-    print("Configuration:")
-    print(f"  - Reasoning level: {config.reasoning_level.value} (thorough)")
-    print(f"  - Max tokens: {config.max_tokens} (longer responses)")
-
-    question = "What are the ethical implications of using AI in hiring decisions?"
-
-    print(f"\nQuestion: {question}")
-
-    # Mock response with extensive reasoning
-    mock_response = """
-<|start|>assistant<|channel|>analysis<|message|>
-This is a complex ethical question requiring careful analysis:
-
-1. Key stakeholders: Job applicants, employers, society
-2. Potential benefits: Reduced bias, efficiency, consistency
-3. Potential harms: Algorithmic bias, lack of transparency, discrimination
-4. Ethical frameworks: Fairness, accountability, transparency
-5. Real-world considerations: Legal compliance, public trust
-
-I should present a balanced view covering both opportunities and concerns,
-emphasizing the importance of responsible AI deployment.
-<|end|>
-<|start|>assistant<|channel|>final<|message|>
-Using AI in hiring raises several important ethical considerations:
-
-**Potential Benefits:**
-- Can reduce human bias and increase objectivity
-- Enables consistent evaluation across all candidates
-- Improves efficiency in processing large applicant pools
-
-**Ethical Concerns:**
-- Risk of encoding historical biases from training data
-- Lack of transparency in decision-making ("black box" problem)
-- Potential for discriminatory outcomes against protected groups
-- Difficulty in providing meaningful explanations to rejected candidates
-
-**Key Requirements:**
-- Regular audits for bias and fairness
-- Transparency in how AI systems make decisions
-- Human oversight and appeal processes
-- Compliance with anti-discrimination laws
-
-The ethical use of AI in hiring requires careful design, ongoing monitoring,
-and commitment to fairness and transparency.
-<|end|>
-"""
-
-    encoder = HarmonyEncoder()
-    parsed = encoder.parse_response(mock_response)
-
-    print("\n--- Response ---")
-    print(parsed.final)
-
-    print("\n--- Detailed Reasoning Trace ---")
-    if parsed.analysis:
-        print(parsed.analysis)
-        print("\nNote: High reasoning level provides extensive analysis, improving quality.")
-    else:
-        print("No reasoning captured")
-
-
-def example_4_developer_role():
-    """
-    Example 4: Developer Role with Analysis Access
-
-    Shows how developers can access reasoning traces programmatically
-    for debugging and quality improvement.
-    """
-    print_section("Example 4: Developer Role - Accessing Reasoning")
-
-    print("Scenario: A developer debugging unexpected model behavior\n")
-
-    # Simulate multiple generations with different reasoning levels
-    test_cases = [
-        ("low", "What is 2+2?"),
-        ("medium", "Explain photosynthesis"),
-        ("high", "Design a scalable microservices architecture")
+    # Step 3: Build a simple conversation
+    messages = [
+        {"role": "user", "content": "What is Python?"}
     ]
 
-    for level, prompt in test_cases:
-        print(f"\n--- Test: {prompt} (Reasoning: {level}) ---")
+    conversation = builder.build_conversation(
+        messages=messages,
+        system_prompt=system_prompt,
+        include_generation_prompt=True
+    )
 
-        # Mock response
-        mock_responses = {
-            "low": """
-<|start|>assistant<|channel|>analysis<|message|>
-Simple arithmetic.
-<|end|>
-<|start|>assistant<|channel|>final<|message|>
-2 + 2 = 4
-<|end|>
-""",
-            "medium": """
-<|start|>assistant<|channel|>analysis<|message|>
-Photosynthesis is a biological process. Key points: light energy, CO2, water, oxygen, glucose.
-Need to explain the process clearly for general audience.
-<|end|>
-<|start|>assistant<|channel|>final<|message|>
-Photosynthesis is the process by which plants convert light energy into chemical energy.
-Plants use sunlight, carbon dioxide, and water to produce glucose (sugar) and oxygen.
-The oxygen is released as a byproduct, while the glucose provides energy for the plant.
-<|end|>
-""",
-            "high": """
-<|start|>assistant<|channel|>analysis<|message|>
-Complex architecture question requiring systematic approach:
-1. Define microservices principles
-2. Consider scalability requirements
-3. Address common challenges (service discovery, data consistency, communication)
-4. Provide concrete recommendations
+    print(f"\n✓ Built conversation:")
+    print(f"  - Total tokens: {len(conversation.token_ids)}")
+    print(f"  - Messages: {conversation.metadata['message_count']}")
+    print(f"  - Has generation prompt: {conversation.metadata['include_generation_prompt']}")
 
-Should structure response as: principles, architecture components, best practices.
+    # Step 4: Simulate response parsing
+    print("\n✓ In production, you would:")
+    print("  1. Pass conversation.token_ids to MLX model")
+    print("  2. Collect generated token IDs")
+    print("  3. Parse response with HarmonyResponseParser")
+
+    # Mock response parsing example
+    print_subsection("Response Parsing (Conceptual)")
+
+    print("\n💡 In production, you would:")
+    print("  1. Get token IDs from model generation")
+    print("  2. Create HarmonyResponseParser instance")
+    print("  3. Call parser.parse_response_tokens(token_ids)")
+    print("  4. Access parsed.final for user-facing content")
+    print("  5. Access parsed.analysis for debugging")
+
+    print("\n📝 Example Code:")
+    print("""
+    # Production parsing example:
+    parser = HarmonyResponseParser()
+    parsed = parser.parse_response_tokens(
+        token_ids=generated_token_ids,
+        extract_final_only=False  # Get all channels
+    )
+
+    # Display to user
+    print(parsed.final)
+
+    # Log for debugging
+    if parsed.analysis:
+        logger.debug(f"Reasoning: {parsed.analysis}")
+    """)
+
+    print("\n✓ Expected response structure:")
+    print("  - Analysis channel: Model's reasoning process")
+    print("    Example: 'Python is a programming language. I should provide...'")
+    print("  - Final channel: User-facing response")
+    print("    Example: 'Python is a high-level, interpreted programming language...'")
+    print("  - Metadata: Parse time, token count, etc.")
+
+    print("\n✅ Basic usage complete!")
+
+
+def example_2_reasoning_levels():
+    """
+    Example 2: Reasoning Levels - LOW/MEDIUM/HIGH Comparison
+
+    Demonstrates:
+    - Different reasoning levels (LOW, MEDIUM, HIGH)
+    - How reasoning level affects system prompt
+    - Impact on response verbosity
+    - When to use each level
+    """
+    print_section("Example 2: Reasoning Levels")
+
+    builder = HarmonyPromptBuilder()
+
+    print("Comparing reasoning levels:\n")
+
+    levels = [
+        (ReasoningLevel.LOW, "Fast, concise responses for simple tasks"),
+        (ReasoningLevel.MEDIUM, "Balanced approach for most use cases"),
+        (ReasoningLevel.HIGH, "Thorough reasoning for complex problems")
+    ]
+
+    for reasoning_level, description in levels:
+        print_subsection(f"{reasoning_level.value.upper()} Reasoning")
+
+        system_prompt = builder.build_system_prompt(
+            reasoning_level=reasoning_level,
+            knowledge_cutoff="2024-06",
+            current_date="2025-10-27"
+        )
+
+        print(f"Description: {description}")
+        print(f"System prompt tokens: {len(system_prompt.token_ids)}")
+        print(f"Metadata: {system_prompt.metadata}")
+
+        # Show how reasoning level affects the prompt
+        if reasoning_level == ReasoningLevel.LOW:
+            print("\n💡 Use LOW for:")
+            print("   - Simple factual questions")
+            print("   - Quick lookups")
+            print("   - When speed is critical")
+            print("   - Example: 'What is 2+2?'")
+        elif reasoning_level == ReasoningLevel.MEDIUM:
+            print("\n💡 Use MEDIUM for:")
+            print("   - General conversation")
+            print("   - Balanced responses")
+            print("   - Most use cases")
+            print("   - Example: 'Explain how photosynthesis works'")
+        else:  # HIGH
+            print("\n💡 Use HIGH for:")
+            print("   - Complex analysis")
+            print("   - Multi-step problems")
+            print("   - When quality > speed")
+            print("   - Example: 'Design a scalable microservices architecture'")
+
+    print("\n✅ Reasoning levels comparison complete!")
+
+
+def example_3_multi_turn_conversation():
+    """
+    Example 3: Multi-Turn Conversations - Conversation History
+
+    Demonstrates:
+    - Building conversations with history
+    - Preserving context across turns
+    - Handling multi-turn dialogue
+    - Message structure for conversation
+    """
+    print_section("Example 3: Multi-Turn Conversations")
+
+    builder = HarmonyPromptBuilder()
+
+    # Build system prompt
+    system_prompt = builder.build_system_prompt(
+        reasoning_level=ReasoningLevel.MEDIUM,
+        knowledge_cutoff="2024-06",
+        current_date="2025-10-27"
+    )
+
+    print("Building a multi-turn conversation:\n")
+
+    # Turn 1: Initial question
+    print_subsection("Turn 1: Initial Question")
+
+    messages_turn1 = [
+        {"role": "user", "content": "What is machine learning?"}
+    ]
+
+    conversation_turn1 = builder.build_conversation(
+        messages=messages_turn1,
+        system_prompt=system_prompt,
+        include_generation_prompt=True
+    )
+
+    print(f"Messages: {len(messages_turn1)}")
+    print(f"Total tokens: {len(conversation_turn1.token_ids)}")
+    print("User: What is machine learning?")
+    print("Assistant: <generates response>")
+
+    # Turn 2: Follow-up question
+    print_subsection("Turn 2: Follow-up Question")
+
+    messages_turn2 = [
+        {"role": "user", "content": "What is machine learning?"},
+        {"role": "assistant", "content": "Machine learning is a subset of AI..."},
+        {"role": "user", "content": "Can you give me an example?"}
+    ]
+
+    conversation_turn2 = builder.build_conversation(
+        messages=messages_turn2,
+        system_prompt=system_prompt,
+        include_generation_prompt=True
+    )
+
+    print(f"Messages: {len(messages_turn2)}")
+    print(f"Total tokens: {len(conversation_turn2.token_ids)}")
+    print("User: Can you give me an example?")
+    print("Assistant: <generates response>")
+
+    # Turn 3: Clarification
+    print_subsection("Turn 3: Clarification")
+
+    messages_turn3 = [
+        {"role": "user", "content": "What is machine learning?"},
+        {"role": "assistant", "content": "Machine learning is a subset of AI..."},
+        {"role": "user", "content": "Can you give me an example?"},
+        {"role": "assistant", "content": "Sure! For example, email spam detection..."},
+        {"role": "user", "content": "How does the spam detector learn?"}
+    ]
+
+    conversation_turn3 = builder.build_conversation(
+        messages=messages_turn3,
+        system_prompt=system_prompt,
+        include_generation_prompt=True
+    )
+
+    print(f"Messages: {len(messages_turn3)}")
+    print(f"Total tokens: {len(conversation_turn3.token_ids)}")
+    print("User: How does the spam detector learn?")
+    print("Assistant: <generates response>")
+
+    print("\n💡 Key Points:")
+    print("   - Each turn includes full conversation history")
+    print("   - Context is preserved across turns")
+    print("   - Token count grows with conversation length")
+    print("   - Consider context window limits for long conversations")
+
+    print("\n✅ Multi-turn conversation complete!")
+
+
+def example_4_presets_integration():
+    """
+    Example 4: Presets Integration - Using Preset Helpers
+
+    Demonstrates:
+    - Using get_developer_content() with presets
+    - Different preset personalities
+    - Building developer prompts from presets
+    - Combining system and developer prompts
+    """
+    print_section("Example 4: Presets Integration")
+
+    builder = HarmonyPromptBuilder()
+
+    # Build system prompt
+    system_prompt = builder.build_system_prompt(
+        reasoning_level=ReasoningLevel.MEDIUM,
+        knowledge_cutoff="2024-06",
+        current_date="2025-10-27"
+    )
+
+    print("Demonstrating different presets:\n")
+
+    # Example 1: Coding Assistant
+    print_subsection("Preset: Coding Assistant")
+
+    # Get preset text
+    coding_preset = get_preset("coding")
+    print(f"Preset text: {coding_preset[:80]}...")
+
+    # Build developer prompt
+    developer_prompt_coding = builder.build_developer_prompt(
+        instructions=coding_preset
+    )
+
+    print(f"\n✓ Built developer prompt:")
+    print(f"  - Tokens: {len(developer_prompt_coding.token_ids)}")
+    print(f"  - Has instructions: {developer_prompt_coding.metadata['has_instructions']}")
+
+    # Build complete conversation
+    messages = [{"role": "user", "content": "How do I read a file in Python?"}]
+
+    conversation = builder.build_conversation(
+        messages=messages,
+        system_prompt=system_prompt,
+        developer_prompt=developer_prompt_coding,
+        include_generation_prompt=True
+    )
+
+    print(f"\n✓ Complete conversation:")
+    print(f"  - Total tokens: {len(conversation.token_ids)}")
+    print(f"  - Has system prompt: {conversation.metadata['has_system_prompt']}")
+    print(f"  - Has developer prompt: {conversation.metadata['has_developer_prompt']}")
+
+    # Example 2: Creative Assistant
+    print_subsection("Preset: Creative Assistant")
+
+    creative_preset = get_preset("creative")
+    developer_prompt_creative = builder.build_developer_prompt(
+        instructions=creative_preset
+    )
+
+    print(f"Preset: {creative_preset[:60]}...")
+    print(f"Developer prompt tokens: {len(developer_prompt_creative.token_ids)}")
+
+    # Example 3: Analytical Assistant
+    print_subsection("Preset: Analytical Assistant")
+
+    analytical_preset = get_preset("analytical")
+    developer_prompt_analytical = builder.build_developer_prompt(
+        instructions=analytical_preset
+    )
+
+    print(f"Preset: {analytical_preset[:60]}...")
+    print(f"Developer prompt tokens: {len(developer_prompt_analytical.token_ids)}")
+
+    print("\n💡 Available Presets:")
+    available_presets = [
+        "default", "concise", "detailed", "coding", "creative",
+        "analytical", "teacher", "professional", "casual", "researcher",
+        "debug", "minimalist", "socratic", "roleplay"
+    ]
+    print(f"   {', '.join(available_presets)}")
+
+    print("\n✅ Presets integration complete!")
+
+
+def example_5_streaming_with_channels():
+    """
+    Example 5: Streaming with Channels - Real-time Parsing
+
+    Demonstrates:
+    - Streaming generation with channel detection
+    - Real-time channel metadata
+    - Filtering by channel
+    - Displaying different channels
+    """
+    print_section("Example 5: Streaming with Channels")
+
+    print("Simulating streaming generation with channel detection:\n")
+
+    # Simulate streaming tokens from model
+    # In production, these would come from MLX model in real-time
+    mock_streaming_response = """<|start|>assistant<|channel|>analysis<|message|>
+This is a complex question about quantum computing. Let me break it down:
+1. Define quantum computing
+2. Explain key concepts (qubits, superposition, entanglement)
+3. Mention applications
+4. Note current limitations
 <|end|>
 <|start|>assistant<|channel|>commentary<|message|>
-Drawing on software architecture knowledge base.
-Considering industry best practices.
+Drawing from physics and computer science knowledge bases.
+Using simplified explanations for general audience.
 <|end|>
 <|start|>assistant<|channel|>final<|message|>
-A scalable microservices architecture should include:
+Quantum computing leverages quantum mechanical phenomena like superposition and entanglement to perform calculations. Unlike classical bits (0 or 1), quantum bits (qubits) can exist in multiple states simultaneously. This enables quantum computers to solve certain problems exponentially faster than classical computers, particularly in cryptography, optimization, and molecular simulation. However, quantum computers are still experimental and face challenges like high error rates and maintaining quantum coherence.
+<|end|>"""
 
-**Core Principles:**
-- Single responsibility per service
-- Independent deployment and scaling
-- Decentralized data management
+    # Simulate streaming by processing text in chunks
+    print_subsection("Streaming Simulation")
 
-**Key Components:**
-- API Gateway for routing and authentication
-- Service registry for discovery
-- Message queue for async communication
-- Distributed caching layer
-- Centralized logging and monitoring
+    print("\n[Starting stream...]")
+
+    # Simulate channel detection during streaming
+    current_channel = None
+    buffer = ""
+
+    # Simple channel detection (in production, use proper token-based detection)
+    lines = mock_streaming_response.split('\n')
+
+    for line in lines:
+        if '<|channel|>analysis<|message|>' in line:
+            if current_channel:
+                print(f"\n[Channel: {current_channel}] {buffer[:50]}...")
+            current_channel = "analysis"
+            buffer = ""
+            print("\n🔍 [Analysis channel detected]")
+        elif '<|channel|>commentary<|message|>' in line:
+            if current_channel:
+                print(f"\n[Channel: {current_channel}] {buffer[:50]}...")
+            current_channel = "commentary"
+            buffer = ""
+            print("\n💬 [Commentary channel detected]")
+        elif '<|channel|>final<|message|>' in line:
+            if current_channel:
+                print(f"\n[Channel: {current_channel}] {buffer[:50]}...")
+            current_channel = "final"
+            buffer = ""
+            print("\n📄 [Final channel detected - user-facing response]")
+        elif '<|end|>' in line:
+            if current_channel and buffer.strip():
+                print(f"[Channel: {current_channel}] Complete")
+            current_channel = None
+        elif line.strip() and current_channel:
+            buffer += line + " "
+
+    print("\n[Stream complete]")
+
+    # Now demonstrate response parsing
+    print_subsection("Response Parsing")
+
+    print("\n💡 In production, the parser would extract:")
+
+    # Expected parsed channels
+    expected_final = "Quantum computing leverages quantum mechanical phenomena like superposition and entanglement to perform calculations..."
+    expected_analysis = "This is a complex question about quantum computing. Let me break it down: 1. Define quantum computing..."
+    expected_commentary = "Drawing from physics and computer science knowledge bases. Using simplified explanations for general audience."
+
+    print(f"  ✓ Analysis channel: {expected_analysis[:60]}...")
+    print(f"  ✓ Commentary channel: {expected_commentary[:60]}...")
+    print(f"  ✓ Final channel: {expected_final[:60]}...")
+
+    # Show each channel separately
+    print_subsection("Channel Display Options")
+
+    print("\n1️⃣  Show FINAL only (for end users):")
+    print(f"   {expected_final[:100]}...")
+
+    print("\n2️⃣  Show FINAL + ANALYSIS (for developers debugging):")
+    print(f"   [Final]: {expected_final[:80]}...")
+    print(f"   [Analysis]: {expected_analysis[:80]}...")
+
+    print("\n3️⃣  Show ALL channels (complete transparency):")
+    print(f"   [analysis]: {expected_analysis[:60]}...")
+    print(f"   [commentary]: {expected_commentary[:60]}...")
+    print(f"   [final]: {expected_final[:60]}...")
+
+    print("\n💡 Streaming Benefits:")
+    print("   - Real-time channel detection")
+    print("   - Progressive display of final response")
+    print("   - Live reasoning traces for debugging")
+    print("   - Better user experience for long generations")
+
+    print("\n✅ Streaming with channels complete!")
+
+
+def example_6_complete_workflow():
+    """
+    Example 6: Complete Workflow - End-to-End Example
+
+    Demonstrates:
+    - Complete workflow from configuration to display
+    - All features integrated together
+    - Error handling and best practices
+    - Production-ready example
+    """
+    print_section("Example 6: Complete Workflow")
+
+    print("End-to-end example with all features:\n")
+
+    # Step 1: Configuration
+    print_subsection("Step 1: Configuration")
+
+    # Define configuration
+    config = {
+        "reasoning_level": ReasoningLevel.HIGH,
+        "knowledge_cutoff": "2024-06",
+        "current_date": "2025-10-27",
+        "preset": "analytical",
+        "include_function_tools": False
+    }
+
+    print("Configuration:")
+    for key, value in config.items():
+        print(f"  - {key}: {value}")
+
+    # Step 2: Build Prompts
+    print_subsection("Step 2: Build Prompts")
+
+    builder = HarmonyPromptBuilder()
+
+    # Build system prompt
+    system_prompt = builder.build_system_prompt(
+        reasoning_level=config["reasoning_level"],
+        knowledge_cutoff=config["knowledge_cutoff"],
+        current_date=config["current_date"],
+        include_function_tools=config["include_function_tools"]
+    )
+
+    print(f"✓ System prompt: {len(system_prompt.token_ids)} tokens")
+
+    # Build developer prompt from preset
+    preset_text = get_preset(config["preset"])
+    developer_prompt = builder.build_developer_prompt(
+        instructions=preset_text
+    )
+
+    print(f"✓ Developer prompt: {len(developer_prompt.token_ids)} tokens")
+
+    # Step 3: Build Conversation
+    print_subsection("Step 3: Build Conversation")
+
+    # Multi-turn conversation
+    messages = [
+        {"role": "user", "content": "Analyze the pros and cons of remote work."},
+        {"role": "assistant", "content": "Remote work has several advantages and disadvantages..."},
+        {"role": "user", "content": "What about the impact on team collaboration?"}
+    ]
+
+    conversation = builder.build_conversation(
+        messages=messages,
+        system_prompt=system_prompt,
+        developer_prompt=developer_prompt,
+        include_generation_prompt=True
+    )
+
+    print(f"✓ Conversation: {len(conversation.token_ids)} tokens")
+    print(f"  - Messages: {conversation.metadata['message_count']}")
+    print(f"  - Has system: {conversation.metadata['has_system_prompt']}")
+    print(f"  - Has developer: {conversation.metadata['has_developer_prompt']}")
+
+    # Step 4: Generate (Mock)
+    print_subsection("Step 4: Generate Response")
+
+    print("\n[In production: Pass conversation.token_ids to MLX model]")
+    print("[Collecting generated tokens...]")
+
+    # Mock response
+    mock_response = """<|start|>assistant<|channel|>analysis<|message|>
+Analyzing team collaboration in remote work context:
+1. Synchronous vs asynchronous communication
+2. Tools and technology requirements
+3. Cultural and timezone challenges
+4. Trust and accountability factors
+5. Creative collaboration considerations
+
+Need to present balanced view with specific examples.
+<|end|>
+<|start|>assistant<|channel|>commentary<|message|>
+Using analytical framework for structured response.
+Drawing on organizational behavior research.
+<|end|>
+<|start|>assistant<|channel|>final<|message|>
+Remote work significantly impacts team collaboration in several ways:
+
+**Challenges:**
+- **Reduced spontaneous interaction:** No hallway conversations or impromptu brainstorming
+- **Communication barriers:** Harder to read body language and social cues
+- **Timezone coordination:** Difficult for globally distributed teams
+- **Technology dependency:** Requires reliable tools and internet connectivity
+- **Team bonding:** Less natural relationship building
+
+**Opportunities:**
+- **Asynchronous collaboration:** Team members can contribute when most productive
+- **Documented communication:** Written records improve clarity and accountability
+- **Diverse perspectives:** Access to global talent pool
+- **Focused work:** Fewer interruptions for deep work
+- **Inclusive participation:** Digital tools can amplify quieter voices
 
 **Best Practices:**
-- Use containerization (Docker/Kubernetes)
-- Implement circuit breakers for fault tolerance
-- Design for eventual consistency
-- Employ automated testing and CI/CD
-<|end|>
-"""
-        }
+- Use a mix of synchronous (video calls) and asynchronous (documents, chat) methods
+- Establish clear communication norms and response expectations
+- Invest in collaborative tools (Slack, Miro, Notion)
+- Schedule regular team building activities
+- Create dedicated channels for social interaction
+<|end|>"""
 
-        encoder = HarmonyEncoder()
-        parsed = encoder.parse_response(mock_responses[level])
+    print("[Generation complete]")
 
-        # Developer analysis
-        print(f"Response length: {len(parsed.final)} chars")
-        print(f"Reasoning length: {len(parsed.analysis or '')} chars")
-        print(f"Has commentary: {parsed.commentary is not None}")
+    # Step 5: Parse Response
+    print_subsection("Step 5: Parse Response")
 
-        # Extract and format reasoning for logs
-        if parsed.analysis:
-            formatted = format_reasoning_trace(parsed.analysis, max_length=150)
-            print(f"Reasoning preview: {formatted}")
+    print("\n💡 In production:")
+    print("   parser = HarmonyResponseParser()")
+    print("   parsed = parser.parse_response_tokens(generated_token_ids)")
 
+    # Expected parsed content
+    expected_final = """Remote work significantly impacts team collaboration in several ways:
 
-def example_5_accessing_reasoning_traces():
-    """
-    Example 5: Programmatic Access to Reasoning
+**Challenges:**
+- **Reduced spontaneous interaction:** No hallway conversations or impromptu brainstorming
+- **Communication barriers:** Harder to read body language and social cues
+- **Timezone coordination:** Difficult for globally distributed teams
+- **Technology dependency:** Requires reliable tools and internet connectivity
+- **Team bonding:** Less natural relationship building
 
-    Demonstrates the full API for working with Harmony responses.
-    """
-    print_section("Example 5: Programmatic Reasoning Access")
+**Opportunities:**
+- **Asynchronous collaboration:** Team members can contribute when most productive
+- **Documented communication:** Written records improve clarity and accountability
+- **Diverse perspectives:** Access to global talent pool
+- **Focused work:** Fewer interruptions for deep work
+- **Inclusive participation:** Digital tools can amplify quieter voices
 
-    mock_response = """
-<|start|>assistant<|channel|>analysis<|message|>
-User asks about quantum computing. Complex topic requiring:
-1. Simple definition
-2. Key concepts (qubits, superposition, entanglement)
-3. Practical applications
-4. Current limitations
-<|end|>
-<|start|>assistant<|channel|>commentary<|message|>
-Accessing knowledge base on quantum computing.
-Simplifying technical concepts for general audience.
-<|end|>
-<|start|>assistant<|channel|>final<|message|>
-Quantum computing uses quantum mechanical phenomena to perform calculations.
-Unlike classical bits (0 or 1), quantum bits (qubits) can exist in superposition,
-representing multiple states simultaneously. This enables quantum computers to solve
-certain problems exponentially faster than classical computers, particularly in
-cryptography, optimization, and drug discovery. However, quantum computers are still
-experimental and face challenges like error rates and maintaining quantum coherence.
-<|end|>
-"""
+**Best Practices:**
+- Use a mix of synchronous (video calls) and asynchronous (documents, chat) methods
+- Establish clear communication norms and response expectations
+- Invest in collaborative tools (Slack, Miro, Notion)
+- Schedule regular team building activities
+- Create dedicated channels for social interaction"""
 
-    print("Methods for accessing Harmony channels:\n")
+    expected_analysis = """Analyzing team collaboration in remote work context:
+1. Synchronous vs asynchronous communication
+2. Tools and technology requirements
+3. Cultural and timezone challenges
+4. Trust and accountability factors
+5. Creative collaboration considerations
 
-    # Method 1: Using HarmonyEncoder
-    print("1. HarmonyEncoder.parse_response()")
-    encoder = HarmonyEncoder()
-    parsed = encoder.parse_response(mock_response)
+Need to present balanced view with specific examples."""
 
-    print(f"   - final: {len(parsed.final)} chars")
-    print(f"   - analysis: {len(parsed.analysis or '')} chars")
-    print(f"   - commentary: {len(parsed.commentary or '')} chars")
-    print(f"   - raw: {len(parsed.raw)} chars")
+    expected_commentary = """Using analytical framework for structured response.
+Drawing on organizational behavior research."""
 
-    # Method 2: Using channel extraction utilities
-    print("\n2. extract_channel() utility")
-    final = extract_channel(mock_response, "final")
-    analysis = extract_channel(mock_response, "analysis")
-    commentary = extract_channel(mock_response, "commentary")
+    print(f"\n✓ Parsing complete:")
+    print(f"  - Final: {len(expected_final)} chars")
+    print(f"  - Analysis: {len(expected_analysis)} chars")
+    print(f"  - Commentary: {len(expected_commentary)} chars")
 
-    print(f"   - final: {final[:50]}...")
-    print(f"   - analysis: {analysis[:50] if analysis else 'None'}...")
-    print(f"   - commentary: {commentary[:50] if commentary else 'None'}...")
+    # Step 6: Display Results
+    print_subsection("Step 6: Display Results")
 
-    # Method 3: Extract all channels at once
-    print("\n3. extract_all_channels() utility")
-    channels = extract_all_channels(mock_response)
+    print("\n📄 USER-FACING RESPONSE:")
+    print("-" * 70)
+    print(expected_final)
+    print("-" * 70)
 
-    print(f"   - Found {len(channels)} channels: {list(channels.keys())}")
-    for name, content in channels.items():
-        print(f"   - {name}: {len(content)} chars")
+    print("\n🔍 DEVELOPER DEBUG INFO:")
+    print(f"Analysis channel: {expected_analysis[:200]}...")
+    print(f"Commentary channel: {expected_commentary}")
 
-    # Method 4: Format reasoning for display
-    print("\n4. format_reasoning_trace() for display")
-    if analysis:
-        formatted = format_reasoning_trace(analysis, max_length=200)
-        print(f"   Formatted: {formatted}")
+    print("\n📊 METADATA:")
+    print(f"  - final_length: {len(expected_final)} chars")
+    print(f"  - analysis_length: {len(expected_analysis)} chars")
+    print(f"  - commentary_length: {len(expected_commentary)} chars")
+    print(f"  - channels_detected: 3 (analysis, commentary, final)")
 
-    # Method 5: Validate Harmony format
-    print("\n5. Validating Harmony format")
-    is_valid = encoder.validate_format(mock_response)
-    print(f"   Valid Harmony format: {is_valid}")
+    # Step 7: Best Practices Summary
+    print_subsection("Step 7: Best Practices")
 
-    # Show the complete API
-    print("\n--- Complete API Usage Example ---")
-    print("""
-# In your application:
-from src.prompts.harmony import HarmonyEncoder
-from src.prompts.harmony_channels import extract_channel, format_reasoning_trace
+    print("\n✅ Production Checklist:")
+    print("   [✓] Use appropriate reasoning level for task")
+    print("   [✓] Include system prompt with context")
+    print("   [✓] Choose preset matching use case")
+    print("   [✓] Build conversation with proper message structure")
+    print("   [✓] Handle errors gracefully")
+    print("   [✓] Parse response with HarmonyResponseParser")
+    print("   [✓] Show FINAL channel to users")
+    print("   [✓] Log ANALYSIS channel for debugging")
+    print("   [✓] Track metadata and metrics")
 
-encoder = HarmonyEncoder()
-parsed = encoder.parse_response(model_output)
+    print("\n💡 Error Handling:")
+    print("   - Validate token_ids before passing to model")
+    print("   - Catch parsing errors and provide fallbacks")
+    print("   - Log failures for debugging")
+    print("   - Always return user-friendly error messages")
 
-# For end users (SAFE)
-display_to_user(parsed.final)
+    print("\n💡 Performance Tips:")
+    print("   - Reuse HarmonyPromptBuilder instances")
+    print("   - Use extract_final_only=True when only final response needed")
+    print("   - Monitor token counts to stay within context limits")
+    print("   - Cache system/developer prompts when possible")
 
-# For developers (DEBUG)
-if parsed.analysis:
-    log_reasoning(parsed.analysis)
-
-# For tool usage tracking
-if parsed.commentary:
-    log_actions(parsed.commentary)
-
-# Formatted for display
-if config.show_reasoning and parsed.analysis:
-    formatted = format_reasoning_trace(parsed.analysis, max_length=500)
-    print(f"[Reasoning: {formatted}]")
-""")
-
-
-def example_6_encoding_messages():
-    """
-    Example 6: Encoding Messages with HarmonyEncoder
-
-    Shows how to build Harmony-formatted prompts programmatically.
-    """
-    print_section("Example 6: Encoding Messages")
-
-    encoder = HarmonyEncoder()
-
-    # Build a conversation
-    messages = [
-        HarmonyMessage(Role.SYSTEM, "You are a helpful AI assistant."),
-        HarmonyMessage(Role.USER, "What is machine learning?"),
-        HarmonyMessage(
-            Role.ASSISTANT,
-            "Let me explain this step by step...",
-            channel=Channel.ANALYSIS
-        ),
-        HarmonyMessage(
-            Role.ASSISTANT,
-            "Machine learning is a subset of artificial intelligence...",
-            channel=Channel.FINAL
-        ),
-        HarmonyMessage(Role.USER, "Can you give me an example?")
-    ]
-
-    print("Encoding conversation with multiple messages and channels:\n")
-
-    # Encode the conversation
-    prompt = encoder.encode_conversation(messages, include_generation_prompt=True)
-
-    print("Encoded prompt:")
-    print(prompt)
-
-    # Show structure
-    print("\n--- Structure Analysis ---")
-    print(f"Total length: {len(prompt)} characters")
-    print(f"Number of messages: {len(messages)}")
-    print(f"Includes generation prompt: Yes")
-    print(f"Ready for model input: Yes")
-
-    # Validate the encoded format
-    is_valid = encoder.validate_format(prompt)
-    print(f"Valid Harmony format: {is_valid}")
+    print("\n✅ Complete workflow finished!")
 
 
 def main():
     """Run all examples."""
     print("\n")
     print("╔" + "═" * 68 + "╗")
-    print("║" + " " * 20 + "HARMONY FORMAT EXAMPLES" + " " * 25 + "║")
+    print("║" + " " * 15 + "HARMONY FORMAT EXAMPLES - NEW API" + " " * 16 + "║")
     print("╚" + "═" * 68 + "╝")
 
-    print("\nThis script demonstrates Harmony multi-channel format usage.")
+    print("\nThis script demonstrates the new openai-harmony implementation.")
     print("All examples use mock responses for demonstration purposes.")
-    print("\nIn production, connect to a real model using ModelLoader and InferenceEngine.")
+    print("\nIn production, connect to a real MLX model using InferenceEngine.")
+
+    examples = [
+        ("1. Basic Usage", example_1_basic_usage),
+        ("2. Reasoning Levels", example_2_reasoning_levels),
+        ("3. Multi-Turn Conversations", example_3_multi_turn_conversation),
+        ("4. Presets Integration", example_4_presets_integration),
+        ("5. Streaming with Channels", example_5_streaming_with_channels),
+        ("6. Complete Workflow", example_6_complete_workflow),
+    ]
+
+    print("\n" + "=" * 70)
+    print(" AVAILABLE EXAMPLES")
+    print("=" * 70)
+    for name, _ in examples:
+        print(f"  {name}")
+    print("=" * 70)
 
     # Run all examples
     try:
-        example_1_summarization_with_reasoning()
-        example_2_extraction_with_citations()
-        example_3_chat_with_reasoning()
-        example_4_developer_role()
-        example_5_accessing_reasoning_traces()
-        example_6_encoding_messages()
+        for name, example_func in examples:
+            example_func()
 
         print_section("Summary")
-        print("All examples completed successfully!")
-        print("\nKey takeaways:")
-        print("  1. Use appropriate reasoning levels for different tasks")
-        print("  2. Capture reasoning for debugging and quality improvement")
-        print("  3. Always show parsed.final to end users (never parsed.analysis)")
-        print("  4. Use channel extraction utilities for flexible access")
-        print("  5. Format reasoning traces for readable display")
-        print("\nFor more information:")
-        print("  - User Guide: docs/harmony_integration.md")
-        print("  - Migration Guide: docs/migration_to_harmony.md")
-        print("  - API Reference: See docstrings in src/prompts/harmony.py")
+        print("All examples completed successfully! 🎉")
+        print("\n✨ Key Improvements Over Old Implementation:")
+        print("   1. Official openai-harmony package (better compatibility)")
+        print("   2. Token-based prompt building (more accurate)")
+        print("   3. StreamableParser for robust channel extraction")
+        print("   4. Type-safe interfaces with clear contracts")
+        print("   5. Better error handling and metadata tracking")
+        print("   6. Integration with presets system")
+        print("   7. Support for multi-channel streaming")
+        print("   8. Production-ready with performance optimizations")
+
+        print("\n📚 Educational Value:")
+        print("   ✓ Learn Harmony format fundamentals")
+        print("   ✓ Understand reasoning levels")
+        print("   ✓ Master multi-turn conversations")
+        print("   ✓ Integrate with presets effectively")
+        print("   ✓ Handle streaming responses")
+        print("   ✓ Build complete production workflows")
+
+        print("\n📖 For More Information:")
+        print("   - API Documentation: src/prompts/harmony_native.py")
+        print("   - Presets Guide: src/prompts/presets.py")
+        print("   - Integration Contracts: .context-kit/orchestration/harmony-replacement/")
+        print("   - Tests: tests/unit/test_prompts/test_harmony_native.py")
+
+        print("\n🚀 Next Steps:")
+        print("   1. Run with real MLX model: python src/main.py")
+        print("   2. Experiment with different reasoning levels")
+        print("   3. Try different presets for various use cases")
+        print("   4. Build your own custom conversations")
+        print("   5. Integrate streaming for better UX")
 
     except Exception as e:
         print(f"\n❌ Error: {e}")

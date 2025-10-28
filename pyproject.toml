@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gpt-oss-cli-chat"
 version = "0.1.0"
-description = "MLX-optimized CLI chat interface for GPT-J/GPT-NeoX 20B models on Apple Silicon"
+description = "MLX-optimized CLI chat interface for GPT-J/GPT-NeoX 20B models on Apple Silicon with Harmony multi-channel support"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Tucker", email = "tucker@tkr-projects.com"}
 ]
-keywords = ["mlx", "gpt", "cli", "chat", "apple-silicon", "inference"]
+keywords = ["mlx", "gpt", "cli", "chat", "apple-silicon", "inference", "harmony", "reasoning"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -31,7 +31,7 @@ dependencies = [
     "rich>=13.7.0",
     "prompt-toolkit>=3.0.43",
     "python-dotenv>=1.0.0",
-    "openai-harmony>=0.1.0",
+    "openai-harmony>=0.0.4",
     "pyyaml>=6.0.1",
 ]
 

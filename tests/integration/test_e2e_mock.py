@@ -124,13 +124,15 @@ class TestE2EMockFullWorkflow:
         # Stream first response
         conversation.add_message("user", "Hi")
         tokens1 = list(engine.generate_stream(prompt=conversation.format_prompt()))
-        response1 = "".join(tokens1)
+        # Extract text from dict tokens (new format)
+        response1 = "".join(t['token'] if isinstance(t, dict) else t for t in tokens1)
         conversation.add_message("assistant", response1)
 
         # Stream second response
         conversation.add_message("user", "Tell me about Python")
         tokens2 = list(engine.generate_stream(prompt=conversation.format_prompt()))
-        response2 = "".join(tokens2)
+        # Extract text from dict tokens (new format)
+        response2 = "".join(t['token'] if isinstance(t, dict) else t for t in tokens2)
         conversation.add_message("assistant", response2)
 
         # Verify

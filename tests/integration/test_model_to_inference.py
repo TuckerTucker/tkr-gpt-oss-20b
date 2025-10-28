@@ -151,7 +151,10 @@ class TestModelLoaderToInferenceIntegration:
         engine = InferenceEngine(model_loader=loader)
 
         # Stream text
-        tokens = list(engine.generate_stream(prompt="Test prompt"))
+        token_dicts = list(engine.generate_stream(prompt="Test prompt"))
+
+        # Extract tokens from dicts (new format)
+        tokens = [t['token'] if isinstance(t, dict) else t for t in token_dicts]
 
         # Verify streaming worked
         assert mock_stream_generate.called
@@ -452,7 +455,9 @@ class TestFullModelToInferenceWorkflow:
 
         # Stream generation
         tokens = []
-        for token in engine.generate_stream(prompt="Test"):
+        for token_dict in engine.generate_stream(prompt="Test"):
+            # Extract token string from dict (new format)
+            token = token_dict['token'] if isinstance(token_dict, dict) else token_dict
             tokens.append(token)
 
         # Verify

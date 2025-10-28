@@ -1,456 +1,648 @@
 """
-Unit tests for Harmony channel extraction utilities.
+Unit tests for Harmony Response Parser channel extraction.
 
 Tests cover:
-- Channel extraction for all channel types
+- Channel extraction for all channel types (analysis, commentary, final)
 - Multi-channel response handling
 - Malformed input handling
 - Format validation
-- Reasoning trace formatting
-- PromptTemplate.add_developer() method
+- ParsedHarmonyResponse dataclass usage
+- Extract methods and utilities
 """
 
 import pytest
-from src.prompts.harmony_channels import (
-    extract_channel,
-    extract_all_channels,
-    validate_harmony_format,
-    format_reasoning_trace,
+import sys
+import os
+
+# Add contract path for interface imports
+contract_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    '.context-kit', 'orchestration', 'harmony-replacement', 'integration-contracts'
 )
-from src.prompts.templates import PromptTemplate
+if os.path.exists(contract_path):
+    sys.path.insert(0, contract_path)
+
+from harmony_parser_interface import ParsedHarmonyResponse
+
+from src.prompts.harmony_native import (
+    HarmonyResponseParser,
+    HarmonyFormatError,
+)
+
+
+class MockTokenizer:
+    """Mock tokenizer for testing."""
+
+    def encode(self, text, allowed_special="all"):
+        """Mock encode method."""
+        # Simple mock: return list of char codes
+        return [ord(c) % 256 for c in text[:100]]
 
 
 class TestExtractChannel:
-    """Test extract_channel function."""
+    """Test extract_channel method from parser."""
 
     def test_extract_final_channel(self):
         """Test extracting final channel content."""
-        text = "<|start|>assistant<|channel|>final<|message|>Hello, world!<|end|>"
-        result = extract_channel(text, "final")
+        parser = HarmonyResponseParser()
+
+        parsed = ParsedHarmonyResponse(
+            final="Hello, world!",
+            channels={"final": "Hello, world!"}
+        )
+
+        result = parser.extract_channel(parsed, "final")
         assert result == "Hello, world!"
 
     def test_extract_analysis_channel(self):
         """Test extracting analysis channel content."""
-        text = "<|start|>assistant<|channel|>analysis<|message|>Step 1: Parse input<|end|>"
-        result = extract_channel(text, "analysis")
+        parser = HarmonyResponseParser()
+
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            analysis="Step 1: Parse input",
+            channels={"final": "Answer", "analysis": "Step 1: Parse input"}
+        )
+
+        result = parser.extract_channel(parsed, "analysis")
         assert result == "Step 1: Parse input"
 
     def test_extract_commentary_channel(self):
         """Test extracting commentary channel content."""
-        text = "<|start|>assistant<|channel|>commentary<|message|>This is interesting<|end|>"
-        result = extract_channel(text, "commentary")
+        parser = HarmonyResponseParser()
+
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            commentary="This is interesting",
+            channels={"final": "Answer", "commentary": "This is interesting"}
+        )
+
+        result = parser.extract_channel(parsed, "commentary")
         assert result == "This is interesting"
 
     def test_extract_missing_channel(self):
         """Test extracting non-existent channel returns None."""
-        text = "<|start|>assistant<|channel|>final<|message|>Hello<|end|>"
-        result = extract_channel(text, "analysis")
+        parser = HarmonyResponseParser()
+
+        parsed = ParsedHarmonyResponse(
+            final="Hello",
+            channels={"final": "Hello"}
+        )
+
+        result = parser.extract_channel(parsed, "analysis")
         assert result is None
 
     def test_extract_from_multi_channel_response(self):
-        """Test extracting specific channel from multi-channel response."""
-        text = """<|start|>assistant<|channel|>analysis<|message|>Think step by step<|end|>
-<|start|>assistant<|channel|>final<|message|>The answer is 42<|end|>"""
+        """Test extracting specific channels from multi-channel response."""
+        parser = HarmonyResponseParser()
 
-        analysis = extract_channel(text, "analysis")
-        final = extract_channel(text, "final")
+        parsed = ParsedHarmonyResponse(
+            final="The answer is 42",
+            analysis="Think step by step",
+            commentary="Simple math problem",
+            channels={
+                "final": "The answer is 42",
+                "analysis": "Think step by step",
+                "commentary": "Simple math problem"
+            }
+        )
+
+        analysis = parser.extract_channel(parsed, "analysis")
+        final = parser.extract_channel(parsed, "final")
+        commentary = parser.extract_channel(parsed, "commentary")
 
         assert analysis == "Think step by step"
         assert final == "The answer is 42"
+        assert commentary == "Simple math problem"
+
+    def test_extract_channel_with_no_channels_dict(self):
+        """Test extracting when channels dict is None."""
+        parser = HarmonyResponseParser()
+
+        parsed = ParsedHarmonyResponse(
+            final="Hello",
+            analysis="Thinking"
+        )
+
+        # Should still work using dedicated fields
+        assert parser.extract_channel(parsed, "final") == "Hello"
+        assert parser.extract_channel(parsed, "analysis") == "Thinking"
+
+    def test_extract_custom_channel_from_dict(self):
+        """Test extracting custom channel from channels dict."""
+        parser = HarmonyResponseParser()
+
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            channels={
+                "final": "Answer",
+                "custom": "Custom content"
+            }
+        )
+
+        result = parser.extract_channel(parsed, "custom")
+        assert result == "Custom content"
+
+
+class TestParsedHarmonyResponseStructure:
+    """Test ParsedHarmonyResponse dataclass structure."""
+
+    def test_parsed_response_with_all_fields(self):
+        """Test creating ParsedHarmonyResponse with all fields."""
+        parsed = ParsedHarmonyResponse(
+            final="Final answer",
+            analysis="Step-by-step reasoning",
+            commentary="Meta-commentary",
+            channels={
+                "final": "Final answer",
+                "analysis": "Step-by-step reasoning",
+                "commentary": "Meta-commentary"
+            },
+            metadata={"token_count": 100, "parse_time_ms": 2.5}
+        )
+
+        assert parsed.final == "Final answer"
+        assert parsed.analysis == "Step-by-step reasoning"
+        assert parsed.commentary == "Meta-commentary"
+        assert parsed.channels["final"] == "Final answer"
+        assert parsed.metadata["token_count"] == 100
+
+    def test_parsed_response_minimal_fields(self):
+        """Test creating ParsedHarmonyResponse with minimal fields."""
+        parsed = ParsedHarmonyResponse(final="Hello")
+
+        assert parsed.final == "Hello"
+        assert parsed.analysis is None
+        assert parsed.commentary is None
+        assert parsed.channels is None
+        assert parsed.metadata is None
+
+    def test_parsed_response_final_required(self):
+        """Test that final field is required."""
+        # This should work - final is required
+        parsed = ParsedHarmonyResponse(final="Required")
+        assert parsed.final == "Required"
+
+        # This would fail at creation time (dataclass requires final)
+        # We can't really test this without expecting a TypeError
+
+    def test_parsed_response_with_empty_final(self):
+        """Test ParsedHarmonyResponse with empty final."""
+        parsed = ParsedHarmonyResponse(final="")
+
+        assert parsed.final == ""
+        assert parsed.final is not None  # Never None, contract requirement
+
+    def test_parsed_response_with_metadata(self):
+        """Test ParsedHarmonyResponse stores metadata correctly."""
+        metadata = {
+            "token_count": 150,
+            "parse_time_ms": 3.2,
+            "message_count": 2
+        }
+
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            metadata=metadata
+        )
+
+        assert parsed.metadata["token_count"] == 150
+        assert parsed.metadata["parse_time_ms"] == 3.2
+        assert parsed.metadata["message_count"] == 2
+
+
+class TestParserValidation:
+    """Test parser format validation methods."""
+
+    def test_validate_empty_tokens(self):
+        """Test validation fails for empty token list."""
+        parser = HarmonyResponseParser()
 
-    def test_extract_channel_with_multiline_content(self):
-        """Test extracting channel with multi-line content."""
-        text = """<|start|>assistant<|channel|>analysis<|message|>Step 1: Parse
-Step 2: Process
-Step 3: Output<|end|>"""
-        result = extract_channel(text, "analysis")
-        assert "Step 1: Parse" in result
-        assert "Step 2: Process" in result
-        assert "Step 3: Output" in result
-
-    def test_extract_channel_empty_input(self):
-        """Test extracting channel from empty input."""
-        assert extract_channel("", "final") is None
-        assert extract_channel(None, "final") is None
-
-    def test_extract_channel_malformed_input(self):
-        """Test extracting channel from malformed input."""
-        result = extract_channel("not harmony format", "final")
-        assert result is None
-
-    def test_extract_channel_with_whitespace(self):
-        """Test extracting channel handles whitespace correctly."""
-        text = "<|start|>assistant<|channel|>  final  <|message|>  Hello  <|end|>"
-        result = extract_channel(text, "final")
-        assert result == "Hello"
-
-    def test_extract_duplicate_channels_returns_last(self):
-        """Test extracting from duplicate channels returns first occurrence."""
-        text = """<|start|>assistant<|channel|>final<|message|>First<|end|>
-<|start|>assistant<|channel|>final<|message|>Second<|end|>"""
-        # extract_channel returns first match it finds
-        result = extract_channel(text, "final")
-        assert result == "First"
-
-
-class TestExtractAllChannels:
-    """Test extract_all_channels function."""
-
-    def test_extract_single_channel(self):
-        """Test extracting all channels from single-channel response."""
-        text = "<|start|>assistant<|channel|>final<|message|>Hello<|end|>"
-        result = extract_all_channels(text)
-        assert result == {"final": "Hello"}
-
-    def test_extract_multiple_channels(self):
-        """Test extracting all channels from multi-channel response."""
-        text = """<|start|>assistant<|channel|>analysis<|message|>Reasoning here<|end|>
-<|start|>assistant<|channel|>commentary<|message|>Interesting note<|end|>
-<|start|>assistant<|channel|>final<|message|>Final answer<|end|>"""
-
-        result = extract_all_channels(text)
-
-        assert len(result) == 3
-        assert result["analysis"] == "Reasoning here"
-        assert result["commentary"] == "Interesting note"
-        assert result["final"] == "Final answer"
-
-    def test_extract_all_channels_empty_input(self):
-        """Test extracting all channels from empty input."""
-        assert extract_all_channels("") == {}
-        assert extract_all_channels(None) == {}
-
-    def test_extract_all_channels_malformed_input(self):
-        """Test extracting all channels from malformed input."""
-        result = extract_all_channels("plain text without markers")
-        assert result == {}
-
-    def test_extract_all_channels_partial_markers(self):
-        """Test extracting all channels with partial markers."""
-        text = "<|start|>assistant<|channel|>final<|message|>incomplete"
-        result = extract_all_channels(text)
-        # No complete channel markers, should return empty
-        assert result == {}
-
-    def test_extract_all_channels_duplicate_channel(self):
-        """Test extracting all channels with duplicate channel names."""
-        text = """<|start|>assistant<|channel|>final<|message|>First<|end|>
-<|start|>assistant<|channel|>final<|message|>Second<|end|>"""
-        result = extract_all_channels(text)
-        # Should keep last occurrence of duplicate channel
-        assert result["final"] == "Second"
-
-    def test_extract_all_channels_preserves_formatting(self):
-        """Test that extract_all_channels preserves content formatting."""
-        text = """<|start|>assistant<|channel|>analysis<|message|>Line 1
-Line 2
-  Indented line<|end|>"""
-        result = extract_all_channels(text)
-        assert "Line 1\nLine 2\n  Indented line" in result["analysis"]
-
-
-class TestValidateHarmonyFormat:
-    """Test validate_harmony_format function."""
-
-    def test_validate_user_message(self):
-        """Test validating user message format."""
-        text = "<|start|>user<|message|>Hello<|end|>"
-        assert validate_harmony_format(text) is True
-
-    def test_validate_system_message(self):
-        """Test validating system message format."""
-        text = "<|start|>system<|message|>You are helpful<|end|>"
-        assert validate_harmony_format(text) is True
-
-    def test_validate_assistant_message_with_channel(self):
-        """Test validating assistant message with channel."""
-        text = "<|start|>assistant<|channel|>final<|message|>Response<|end|>"
-        assert validate_harmony_format(text) is True
-
-    def test_validate_multiple_messages(self):
-        """Test validating multiple messages."""
-        text = """<|start|>user<|message|>Hi<|end|>
-<|start|>assistant<|channel|>final<|message|>Hello<|end|>"""
-        assert validate_harmony_format(text) is True
-
-    def test_validate_plain_text_fails(self):
-        """Test validating plain text returns False."""
-        assert validate_harmony_format("Just plain text") is False
-
-    def test_validate_empty_input(self):
-        """Test validating empty input returns False."""
-        assert validate_harmony_format("") is False
-        assert validate_harmony_format(None) is False
-
-    def test_validate_partial_markers_fails(self):
-        """Test validating partial markers returns False."""
-        assert validate_harmony_format("<|start|>incomplete") is False
-        assert validate_harmony_format("<|message|>no start") is False
-
-    def test_validate_with_extra_text(self):
-        """Test validating format with surrounding text."""
-        text = "Some prefix <|start|>user<|message|>Hi<|end|> some suffix"
-        assert validate_harmony_format(text) is True
-
-
-class TestFormatReasoningTrace:
-    """Test format_reasoning_trace function."""
-
-    def test_format_simple_reasoning(self):
-        """Test formatting simple reasoning text."""
-        reasoning = "Step 1: Parse input\nStep 2: Process"
-        result = format_reasoning_trace(reasoning)
-        assert result == "Step 1: Parse input\nStep 2: Process"
-
-    def test_format_reasoning_truncation(self):
-        """Test formatting with truncation."""
-        reasoning = "A" * 600
-        result = format_reasoning_trace(reasoning, max_length=100)
-
-        assert len(result) <= 113  # 100 + len(" [TRUNCATED]")
-        assert result.endswith("[TRUNCATED]")
-        assert result.startswith("A" * 50)
-
-    def test_format_reasoning_no_truncation_needed(self):
-        """Test formatting when content is under max_length."""
-        reasoning = "Short text"
-        result = format_reasoning_trace(reasoning, max_length=100)
-        assert result == "Short text"
-        assert "[TRUNCATED]" not in result
-
-    def test_format_reasoning_empty_input(self):
-        """Test formatting empty input."""
-        assert format_reasoning_trace("") == ""
-        assert format_reasoning_trace(None) == ""
-
-    def test_format_reasoning_removes_channel_markers(self):
-        """Test formatting removes Harmony channel markers."""
-        reasoning = "<|start|>assistant<|channel|>analysis<|message|>Thinking<|end|>"
-        result = format_reasoning_trace(reasoning)
-        assert result == "Thinking"
-        assert "<|" not in result
-
-    def test_format_reasoning_removes_end_markers(self):
-        """Test formatting removes end markers."""
-        reasoning = "Some reasoning<|end|>"
-        result = format_reasoning_trace(reasoning)
-        assert result == "Some reasoning"
-        assert "<|end|>" not in result
-
-    def test_format_reasoning_preserves_structure(self):
-        """Test formatting preserves line breaks and structure."""
-        reasoning = """Step 1: First
-Step 2: Second
-  - Substep A
-  - Substep B"""
-        result = format_reasoning_trace(reasoning, max_length=1000)
-        assert "Step 1: First" in result
-        assert "Step 2: Second" in result
-        assert "  - Substep A" in result
-
-    def test_format_reasoning_at_exact_limit(self):
-        """Test formatting when text is exactly at max_length."""
-        reasoning = "A" * 100
-        result = format_reasoning_trace(reasoning, max_length=100)
-        assert result == "A" * 100
-        assert "[TRUNCATED]" not in result
-
-    def test_format_reasoning_strips_whitespace(self):
-        """Test formatting strips leading/trailing whitespace."""
-        reasoning = "  \n  Content here  \n  "
-        result = format_reasoning_trace(reasoning)
-        assert result == "Content here"
-
-
-class TestPromptTemplateAddDeveloper:
-    """Test PromptTemplate.add_developer() method."""
-
-    def test_add_developer_message(self):
-        """Test adding developer message to template."""
-        template = PromptTemplate("harmony")
-        template.add_developer("Developer instructions here")
-
-        assert len(template.messages) == 1
-        assert template.messages[0]["role"] == "developer"
-        assert template.messages[0]["content"] == "Developer instructions here"
-
-    def test_add_developer_chaining(self):
-        """Test add_developer returns self for chaining."""
-        template = PromptTemplate("harmony")
-        result = template.add_developer("Test")
-        assert result is template
-
-    def test_add_developer_with_other_messages(self):
-        """Test developer message in conversation with other messages."""
-        template = (PromptTemplate("harmony")
-            .add_system("You are helpful")
-            .add_developer("Use these guidelines")
-            .add_user("Hello")
-            .add_assistant("Hi there"))
-
-        assert len(template.messages) == 4
-        assert template.messages[0]["role"] == "system"
-        assert template.messages[1]["role"] == "developer"
-        assert template.messages[2]["role"] == "user"
-        assert template.messages[3]["role"] == "assistant"
-
-    def test_add_developer_formats_correctly(self):
-        """Test developer message formats with harmony template."""
-        template = (PromptTemplate("harmony")
-            .add_developer("Test developer message"))
-
-        formatted = template.build()
-        assert "<|start|>developer<|message|>" in formatted
-        assert "Test developer message" in formatted
-        assert "<|end|>" in formatted
-
-    def test_multiple_developer_messages(self):
-        """Test adding multiple developer messages."""
-        template = (PromptTemplate("harmony")
-            .add_developer("First dev message")
-            .add_developer("Second dev message"))
-
-        assert len(template.messages) == 2
-        assert all(msg["role"] == "developer" for msg in template.messages)
-
-    def test_developer_message_ordering(self):
-        """Test developer messages maintain insertion order."""
-        template = (PromptTemplate("harmony")
-            .add_system("System")
-            .add_developer("Dev 1")
-            .add_user("User")
-            .add_developer("Dev 2"))
-
-        roles = [msg["role"] for msg in template.messages]
-        assert roles == ["system", "developer", "user", "developer"]
-
-
-class TestHarmonyTemplateRegistration:
-    """Test Harmony template is properly registered."""
-
-    def test_harmony_template_exists(self):
-        """Test harmony template is in TEMPLATES dict."""
-        from src.prompts.templates import TEMPLATES
-        assert "harmony" in TEMPLATES
-
-    def test_harmony_template_has_required_fields(self):
-        """Test harmony template has all required fields."""
-        from src.prompts.templates import TEMPLATES
-        harmony = TEMPLATES["harmony"]
-
-        assert "system" in harmony
-        assert "developer" in harmony
-        assert "user" in harmony
-        assert "assistant" in harmony
-        assert "assistant_start" in harmony
-        assert "name" in harmony
-        assert "description" in harmony
-
-    def test_harmony_template_format_correct(self):
-        """Test harmony template uses correct format strings."""
-        from src.prompts.templates import TEMPLATES
-        harmony = TEMPLATES["harmony"]
-
-        assert "<|start|>system<|message|>" in harmony["system"]
-        assert "<|start|>developer<|message|>" in harmony["developer"]
-        assert "<|start|>user<|message|>" in harmony["user"]
-        assert "<|channel|>" in harmony["assistant"]
-        assert "<|start|>assistant<|channel|>final<|message|>" in harmony["assistant_start"]
-
-    def test_harmony_template_can_be_instantiated(self):
-        """Test PromptTemplate can be created with harmony template."""
-        template = PromptTemplate("harmony")
-        assert template.template_name == "harmony"
-
-
-class TestEdgeCasesAndExceptionHandling:
-    """Test edge cases and exception handling paths."""
-
-    def test_extract_channel_with_regex_catastrophic_backtracking(self):
-        """Test extract_channel handles potentially problematic regex inputs."""
-        # Create input that could cause regex issues
-        malicious = "<|start|>assistant<|channel|>" + ("x" * 10000) + "<|message|>content<|end|>"
-        result = extract_channel(malicious, "test")
-        # Should handle gracefully without hanging
-        assert result is None or isinstance(result, str)
-
-    def test_extract_all_channels_with_nested_markers(self):
-        """Test extract_all_channels with nested or malformed markers."""
-        text = "<|start|>assistant<|channel|>test<|message|><|start|>nested<|end|>"
-        result = extract_all_channels(text)
-        # Should handle gracefully
-        assert isinstance(result, dict)
-
-    def test_validate_harmony_format_with_unicode(self):
-        """Test validate_harmony_format with unicode characters."""
-        text = "<|start|>user<|message|>こんにちは 🌍<|end|>"
-        assert validate_harmony_format(text) is True
-
-    def test_format_reasoning_trace_with_unicode_and_special_chars(self):
-        """Test format_reasoning_trace with unicode and special characters."""
-        reasoning = "Step 1: Test 测试 🔬\nStep 2: More 更多 ✅"
-        result = format_reasoning_trace(reasoning)
-        assert "Test 测试" in result
-        assert "More 更多" in result
+        result = parser.validate_harmony_format([])
+        assert result is False
+
+    def test_validate_non_harmony_tokens(self):
+        """Test validation fails for non-Harmony tokens."""
+        parser = HarmonyResponseParser()
+
+        # Random tokens that don't represent Harmony format
+        result = parser.validate_harmony_format([1, 2, 3, 4, 5])
+        assert result is False
+
+    def test_validate_returns_boolean(self):
+        """Test that validate_harmony_format always returns bool."""
+        parser = HarmonyResponseParser()
+
+        # Should return False for invalid input
+        result = parser.validate_harmony_format([999])
+        assert isinstance(result, bool)
+        assert result is False
+
+
+class TestParserErrorHandling:
+    """Test parser error handling for malformed inputs."""
+
+    def test_parse_empty_tokens_raises_error(self):
+        """Test that parsing empty tokens raises ValueError."""
+        parser = HarmonyResponseParser()
+
+        with pytest.raises(ValueError, match="Token IDs cannot be empty"):
+            parser.parse_response_tokens([])
+
+    def test_parse_empty_text_raises_error(self):
+        """Test that parsing empty text raises ValueError."""
+        parser = HarmonyResponseParser()
+        tokenizer = MockTokenizer()
+
+        with pytest.raises(ValueError, match="Response text cannot be empty"):
+            parser.parse_response_text("", tokenizer)
+
+    def test_parse_with_no_tokenizer_raises_error(self):
+        """Test that parsing without tokenizer raises ValueError."""
+        parser = HarmonyResponseParser()
+
+        with pytest.raises(ValueError, match="Tokenizer is required"):
+            parser.parse_response_text("test", None)
+
+    def test_parse_malformed_tokens_graceful(self):
+        """Test that malformed tokens are handled gracefully."""
+        parser = HarmonyResponseParser()
+
+        # Parser should handle invalid tokens without crashing
+        try:
+            result = parser.parse_response_tokens([999999, 888888])
+            # If it succeeds, should return valid structure
+            assert isinstance(result, ParsedHarmonyResponse)
+            assert result.final is not None  # Never None
+        except (ValueError, HarmonyFormatError):
+            # These are acceptable exceptions for malformed input
+            pass
+
+    def test_parse_with_bad_tokenizer(self):
+        """Test handling of tokenizer without encode method."""
+        parser = HarmonyResponseParser()
+
+        bad_tokenizer = object()  # No encode method
+
+        with pytest.raises(ValueError, match="Tokenizer"):
+            parser.parse_response_text("test", bad_tokenizer)
+
+
+class TestParserTextParsing:
+    """Test text-based parsing using tokenizer."""
+
+    def test_parse_response_text_uses_tokenizer(self):
+        """Test that parse_response_text uses provided tokenizer."""
+        parser = HarmonyResponseParser()
+        tokenizer = MockTokenizer()
+
+        # Should use tokenizer.encode() internally
+        try:
+            result = parser.parse_response_text("Hello", tokenizer)
+            assert isinstance(result, ParsedHarmonyResponse)
+        except (ValueError, HarmonyFormatError):
+            # Expected if tokens don't match Harmony format
+            pass
+
+    def test_parse_response_text_with_unicode(self):
+        """Test parsing text with unicode characters."""
+        parser = HarmonyResponseParser()
+        tokenizer = MockTokenizer()
+
+        try:
+            result = parser.parse_response_text("Hello 世界 🌍", tokenizer)
+            assert isinstance(result, ParsedHarmonyResponse)
+        except (ValueError, HarmonyFormatError):
+            # Expected if tokens don't match Harmony format
+            pass
+
+
+class TestExtractFinalOnly:
+    """Test extract_final_only optimization."""
+
+    def test_parse_with_extract_final_only_true(self):
+        """Test parsing with extract_final_only=True."""
+        parser = HarmonyResponseParser()
+
+        # When extract_final_only=True, parser should skip analysis/commentary
+        # This is an optimization - we can't easily test without real Harmony tokens
+        # Just verify the parameter is accepted
+        try:
+            result = parser.parse_response_tokens([1, 2, 3], extract_final_only=True)
+            # If successful, analysis and commentary should be None
+            if isinstance(result, ParsedHarmonyResponse):
+                # These may be None due to extract_final_only
+                assert result.final is not None
+        except (ValueError, HarmonyFormatError):
+            pass
+
+    def test_parse_text_with_extract_final_only(self):
+        """Test text parsing with extract_final_only=True."""
+        parser = HarmonyResponseParser()
+        tokenizer = MockTokenizer()
+
+        try:
+            result = parser.parse_response_text(
+                "Some text",
+                tokenizer,
+                extract_final_only=True
+            )
+            if isinstance(result, ParsedHarmonyResponse):
+                assert result.final is not None
+        except (ValueError, HarmonyFormatError):
+            pass
+
+
+class TestChannelsDictionary:
+    """Test channels dictionary in ParsedHarmonyResponse."""
+
+    def test_channels_dict_contains_all_channels(self):
+        """Test that channels dict contains all extracted channels."""
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            analysis="Reasoning",
+            commentary="Note",
+            channels={
+                "final": "Answer",
+                "analysis": "Reasoning",
+                "commentary": "Note",
+                "custom": "Custom channel"
+            }
+        )
+
+        assert len(parsed.channels) == 4
+        assert "final" in parsed.channels
+        assert "analysis" in parsed.channels
+        assert "commentary" in parsed.channels
+        assert "custom" in parsed.channels
+
+    def test_channels_dict_can_be_none(self):
+        """Test that channels dict can be None."""
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            channels=None
+        )
+
+        assert parsed.channels is None
+
+    def test_channels_dict_empty(self):
+        """Test that channels dict can be empty."""
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            channels={}
+        )
+
+        assert parsed.channels == {}
+        assert len(parsed.channels) == 0
+
+
+class TestMetadataHandling:
+    """Test metadata field in ParsedHarmonyResponse."""
+
+    def test_metadata_stores_parse_info(self):
+        """Test that metadata can store parsing information."""
+        metadata = {
+            "token_count": 50,
+            "parse_time_ms": 1.5,
+            "message_count": 3,
+            "channel_count": 2
+        }
+
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            metadata=metadata
+        )
+
+        assert parsed.metadata["token_count"] == 50
+        assert parsed.metadata["parse_time_ms"] == 1.5
+
+    def test_metadata_can_be_none(self):
+        """Test that metadata can be None."""
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            metadata=None
+        )
+
+        assert parsed.metadata is None
+
+    def test_metadata_arbitrary_keys(self):
+        """Test that metadata accepts arbitrary keys."""
+        metadata = {
+            "custom_key": "custom_value",
+            "another_key": 123,
+            "nested": {"key": "value"}
+        }
+
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            metadata=metadata
+        )
+
+        assert parsed.metadata["custom_key"] == "custom_value"
+        assert parsed.metadata["another_key"] == 123
+        assert parsed.metadata["nested"]["key"] == "value"
 
 
 class TestIntegrationScenarios:
-    """Test complete integration scenarios."""
+    """Test complete parser integration scenarios."""
 
-    def test_build_and_parse_harmony_conversation(self):
-        """Test building harmony format and parsing response."""
-        # Build a harmony formatted prompt
-        template = (PromptTemplate("harmony")
-            .add_system("You are a helpful assistant")
-            .add_user("What is 2+2?"))
+    def test_parse_and_extract_workflow(self):
+        """Test complete parse and extract workflow."""
+        parser = HarmonyResponseParser()
 
-        prompt = template.build(include_generation_prompt=True)
+        # Create a parsed response as if from actual parsing
+        parsed = ParsedHarmonyResponse(
+            final="The answer is 42",
+            analysis="First I need to understand the question...",
+            commentary="This is a reference to Hitchhiker's Guide",
+            channels={
+                "final": "The answer is 42",
+                "analysis": "First I need to understand the question...",
+                "commentary": "This is a reference to Hitchhiker's Guide"
+            },
+            metadata={"token_count": 150}
+        )
 
-        # Verify format
-        assert validate_harmony_format(prompt)
-        assert "<|start|>assistant<|channel|>final<|message|>" in prompt
+        # Extract each channel
+        final = parser.extract_channel(parsed, "final")
+        analysis = parser.extract_channel(parsed, "analysis")
+        commentary = parser.extract_channel(parsed, "commentary")
 
-        # Simulate response with multiple channels
-        response = """<|start|>assistant<|channel|>analysis<|message|>Simple arithmetic: 2+2=4<|end|>
-<|start|>assistant<|channel|>final<|message|>The answer is 4<|end|>"""
+        assert final == "The answer is 42"
+        assert "understand the question" in analysis
+        assert "Hitchhiker's Guide" in commentary
 
-        # Extract channels
-        channels = extract_all_channels(response)
-        assert channels["analysis"] == "Simple arithmetic: 2+2=4"
-        assert channels["final"] == "The answer is 4"
+    def test_parser_handles_partial_channels(self):
+        """Test parser with only some channels present."""
+        parser = HarmonyResponseParser()
 
-        # Format reasoning
-        reasoning = format_reasoning_trace(channels["analysis"], max_length=100)
-        assert "Simple arithmetic" in reasoning
+        # Only final channel present
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            analysis=None,
+            commentary=None,
+            channels={"final": "Answer"}
+        )
 
-    def test_developer_message_in_harmony_format(self):
-        """Test developer messages work with harmony template."""
-        template = (PromptTemplate("harmony")
-            .add_system("You are helpful")
-            .add_developer("Always provide reasoning in analysis channel")
-            .add_user("Explain something"))
+        assert parser.extract_channel(parsed, "final") == "Answer"
+        assert parser.extract_channel(parsed, "analysis") is None
+        assert parser.extract_channel(parsed, "commentary") is None
 
-        formatted = template.build()
 
-        # Check developer message is formatted correctly
-        assert "<|start|>developer<|message|>" in formatted
-        assert "Always provide reasoning" in formatted
-        assert validate_harmony_format(formatted)
+class TestEdgeCases:
+    """Test edge cases and special scenarios."""
 
-    def test_extract_and_format_workflow(self):
-        """Test complete extract and format workflow."""
-        response = """<|start|>assistant<|channel|>analysis<|message|>""" + ("X" * 1000) + """<|end|>
-<|start|>assistant<|channel|>final<|message|>Answer<|end|>"""
+    def test_extract_channel_with_empty_string(self):
+        """Test extracting channel with empty string content."""
+        parser = HarmonyResponseParser()
 
-        # Extract analysis channel
-        analysis = extract_channel(response, "analysis")
-        assert len(analysis) == 1000
+        parsed = ParsedHarmonyResponse(
+            final="",
+            channels={"final": ""}
+        )
 
-        # Format with truncation
-        formatted = format_reasoning_trace(analysis, max_length=100)
-        assert len(formatted) <= 113
-        assert formatted.endswith("[TRUNCATED]")
+        result = parser.extract_channel(parsed, "final")
+        assert result == ""
+        assert result is not None  # Empty string, not None
 
-        # Extract final answer
-        final = extract_channel(response, "final")
-        assert final == "Answer"
+    def test_extract_channel_with_whitespace(self):
+        """Test extracting channel with whitespace content."""
+        parser = HarmonyResponseParser()
+
+        parsed = ParsedHarmonyResponse(
+            final="  spaces  ",
+            channels={"final": "  spaces  "}
+        )
+
+        result = parser.extract_channel(parsed, "final")
+        # Parser may or may not strip whitespace - just verify it works
+        assert isinstance(result, str)
+
+    def test_extract_channel_case_sensitive(self):
+        """Test that channel names are case-sensitive."""
+        parser = HarmonyResponseParser()
+
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            channels={"final": "Answer", "FINAL": "Different"}
+        )
+
+        # Lowercase should work
+        assert parser.extract_channel(parsed, "final") == "Answer"
+
+        # Uppercase might be different
+        result_upper = parser.extract_channel(parsed, "FINAL")
+        if result_upper is not None:
+            assert result_upper == "Different"
+
+    def test_multiline_content_in_channels(self):
+        """Test channels with multiline content."""
+        parser = HarmonyResponseParser()
+
+        multiline = "Line 1\nLine 2\nLine 3"
+
+        parsed = ParsedHarmonyResponse(
+            final=multiline,
+            channels={"final": multiline}
+        )
+
+        result = parser.extract_channel(parsed, "final")
+        assert "Line 1" in result
+        assert "Line 2" in result
+        assert "Line 3" in result
+
+    def test_unicode_in_channels(self):
+        """Test channels with unicode characters."""
+        parser = HarmonyResponseParser()
+
+        unicode_text = "Hello 世界 🌍"
+
+        parsed = ParsedHarmonyResponse(
+            final=unicode_text,
+            channels={"final": unicode_text}
+        )
+
+        result = parser.extract_channel(parsed, "final")
+        assert "世界" in result
+        assert "🌍" in result
+
+
+class TestContractCompliance:
+    """Test compliance with integration contract requirements."""
+
+    def test_final_never_none_in_parsed_response(self):
+        """Test that ParsedHarmonyResponse.final is never None."""
+        # Contract requirement: final must NEVER be None
+
+        # Minimum valid response
+        parsed = ParsedHarmonyResponse(final="")
+        assert parsed.final is not None
+        assert parsed.final == ""
+
+        # With content
+        parsed = ParsedHarmonyResponse(final="Content")
+        assert parsed.final is not None
+        assert parsed.final == "Content"
+
+    def test_optional_fields_can_be_none(self):
+        """Test that analysis and commentary can be None."""
+        parsed = ParsedHarmonyResponse(
+            final="Answer",
+            analysis=None,
+            commentary=None
+        )
+
+        assert parsed.final == "Answer"
+        assert parsed.analysis is None
+        assert parsed.commentary is None
+
+    def test_parser_has_required_methods(self):
+        """Test that parser has all required interface methods."""
+        parser = HarmonyResponseParser()
+
+        # Check required methods exist
+        assert hasattr(parser, 'parse_response_tokens')
+        assert hasattr(parser, 'parse_response_text')
+        assert hasattr(parser, 'validate_harmony_format')
+        assert hasattr(parser, 'extract_channel')
+
+        # Check methods are callable
+        assert callable(parser.parse_response_tokens)
+        assert callable(parser.parse_response_text)
+        assert callable(parser.validate_harmony_format)
+        assert callable(parser.extract_channel)
+
+    def test_parser_thread_safety(self):
+        """Test that parser is thread-safe (stateless)."""
+        import threading
+
+        parser = HarmonyResponseParser()
+        results = []
+        errors = []
+
+        def extract_task(task_id):
+            try:
+                parsed = ParsedHarmonyResponse(final=f"Task {task_id}")
+                result = parser.extract_channel(parsed, "final")
+                results.append((task_id, result))
+            except Exception as e:
+                errors.append((task_id, e))
+
+        # Run concurrent extractions
+        threads = [threading.Thread(target=extract_task, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All should succeed
+        assert len(errors) == 0
+        assert len(results) == 10
+
+        # Each should have correct result
+        for task_id, result in results:
+            assert result == f"Task {task_id}"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

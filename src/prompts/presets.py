@@ -3,10 +3,31 @@ Common system prompt presets.
 
 This module provides pre-configured system prompts for common use cases,
 including different assistant personalities, task types, and conversation styles.
+
+Harmony Integration:
+    This module now supports converting presets to Harmony DeveloperContent format
+    for use with HarmonyPromptBuilder. Use get_developer_content() to convert
+    any preset to DeveloperContent that can be passed to build_developer_prompt().
+
+    Example with Harmony:
+        >>> from src.prompts.presets import get_developer_content
+        >>> from src.prompts.harmony_native import HarmonyPromptBuilder
+        >>>
+        >>> builder = HarmonyPromptBuilder()
+        >>> dev_content = get_developer_content("creative")
+        >>> harmony_prompt = builder.build_developer_prompt(dev_content.instructions)
+        >>> # Now use harmony_prompt in your conversation
 """
 
 import logging
 from typing import Dict, List, Optional
+
+# Import DeveloperContent for Harmony integration
+try:
+    from openai_harmony import DeveloperContent
+    HARMONY_AVAILABLE = True
+except ImportError:
+    HARMONY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -367,6 +388,127 @@ def create_custom_prompt(
     )
 
     return prompt
+
+
+def get_developer_content(preset_name: str) -> "DeveloperContent":
+    """
+    Convert a preset to DeveloperContent for Harmony format.
+
+    This helper function converts a preset to a DeveloperContent object
+    that can be used with HarmonyPromptBuilder.build_developer_prompt().
+
+    Args:
+        preset_name: Name of the preset to convert
+
+    Returns:
+        DeveloperContent object with preset instructions
+
+    Raises:
+        ImportError: If openai-harmony package is not installed
+        ValueError: If preset_name is not found
+
+    Examples:
+        Basic usage with HarmonyPromptBuilder:
+            >>> from src.prompts.presets import get_developer_content
+            >>> from src.prompts.harmony_native import HarmonyPromptBuilder
+            >>>
+            >>> # Convert preset to DeveloperContent
+            >>> dev_content = get_developer_content("creative")
+            >>>
+            >>> # Use with HarmonyPromptBuilder
+            >>> builder = HarmonyPromptBuilder()
+            >>> harmony_prompt = builder.build_developer_prompt(
+            ...     dev_content.instructions
+            ... )
+
+        Using different presets:
+            >>> # Professional assistant
+            >>> prof_content = get_developer_content("professional")
+            >>>
+            >>> # Coding assistant
+            >>> code_content = get_developer_content("coding")
+            >>>
+            >>> # Concise assistant
+            >>> concise_content = get_developer_content("concise")
+
+        Complete example with conversation:
+            >>> from src.prompts.harmony_native import HarmonyPromptBuilder, ReasoningLevel
+            >>>
+            >>> # Build complete Harmony conversation with preset
+            >>> builder = HarmonyPromptBuilder()
+            >>>
+            >>> # Create system prompt
+            >>> system = builder.build_system_prompt(
+            ...     reasoning_level=ReasoningLevel.HIGH,
+            ...     knowledge_cutoff="2024-06",
+            ...     current_date="2025-10-27"
+            ... )
+            >>>
+            >>> # Create developer prompt from preset
+            >>> dev_content = get_developer_content("analytical")
+            >>> developer = builder.build_developer_prompt(dev_content.instructions)
+            >>>
+            >>> # Build conversation
+            >>> messages = [{"role": "user", "content": "Analyze this data..."}]
+            >>> conversation = builder.build_conversation(
+            ...     messages=messages,
+            ...     system_prompt=system,
+            ...     developer_prompt=developer
+            ... )
+
+        Available presets:
+            - default: General-purpose helpful assistant
+            - concise: Brief, to-the-point responses
+            - detailed: Comprehensive, detailed explanations
+            - coding: Programming and software development help
+            - creative: Creative writing and brainstorming
+            - analytical: Analysis and critical thinking
+            - teacher: Educational and teaching focused
+            - professional: Business and professional contexts
+            - casual: Casual, friendly conversation
+            - researcher: Research and fact-finding
+            - debug: Debugging and troubleshooting
+            - minimalist: Minimal, essential responses only
+            - socratic: Question-based guided learning
+            - roleplay: Roleplaying and character interaction
+
+    Note:
+        This function requires the openai-harmony package to be installed.
+        The function returns a DeveloperContent object with the preset text
+        set as instructions, which will be formatted with "# Instructions"
+        header when rendered by HarmonyPromptBuilder.
+
+    See Also:
+        - get_preset(): Get preset as plain string (legacy)
+        - HarmonyPromptBuilder.build_developer_prompt(): Build Harmony prompt
+        - list_presets(): List all available presets
+    """
+    if not HARMONY_AVAILABLE:
+        raise ImportError(
+            "openai-harmony package is required for get_developer_content(). "
+            "Install with: pip install openai-harmony>=0.0.4"
+        )
+
+    # Get preset text using existing function
+    preset_text = get_preset(preset_name)
+
+    if preset_text is None:
+        available = ", ".join(get_available_presets())
+        raise ValueError(
+            f"Preset '{preset_name}' not found. "
+            f"Available presets: {available}"
+        )
+
+    # Create DeveloperContent with instructions
+    # The build_developer_prompt() method will add "# Instructions" header
+    developer_content = DeveloperContent.new().with_instructions(preset_text)
+
+    logger.debug(
+        f"Converted preset '{preset_name}' to DeveloperContent "
+        f"({len(preset_text)} chars)"
+    )
+
+    return developer_content
 
 
 class SystemPromptBuilder:
