@@ -698,7 +698,12 @@ class HarmonyResponseParser(HarmonyResponseParserInterface):
             # Encode text to tokens using provided tokenizer
             # Try to use the tokenizer's encode method
             if hasattr(tokenizer, 'encode'):
-                token_ids = tokenizer.encode(response_text, allowed_special="all")
+                try:
+                    # Try with allowed_special (for OpenAI/tiktoken tokenizers)
+                    token_ids = tokenizer.encode(response_text, allowed_special="all")
+                except TypeError:
+                    # Fallback for tokenizers that don't support allowed_special (MLX, HuggingFace)
+                    token_ids = tokenizer.encode(response_text)
             elif callable(tokenizer):
                 # If tokenizer is a function, call it directly
                 token_ids = tokenizer(response_text)
@@ -708,7 +713,7 @@ class HarmonyResponseParser(HarmonyResponseParserInterface):
             # Use token-based parsing
             return self.parse_response_tokens(token_ids, extract_final_only)
 
-        except (AttributeError, TypeError) as e:
+        except (AttributeError, TypeError, LookupError) as e:
             raise ValueError(f"Tokenizer encoding failed: {e}")
         except Exception as e:
             logger.error(f"Error encoding text to tokens: {e}", exc_info=True)
